@@ -120,14 +120,18 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   // This morning-only floor approximates log-domain source combination: it
   // becomes relevant only for a high Story Moon, rises with dawn radiance, and
   // naturally stops affecting the image once the solar exposure exceeds it.
-  const highMoonDawn=storySky*(1-s.evening)*smootherstep(.20,.55,moonIllumination)*smootherstep(-32,-21,elevation);
+  const highMoonDawn=storySky*(1-s.evening)*smootherstep(.06,.24,moonIllumination)*smootherstep(-38,-21,elevation);
   // Preserve the adapted night level while a setting Moon hands illumination
   // over to the brightening dawn sky. The quadratic lunar term respects the
   // phase response; the overlapping dawn term begins at astronomical twilight
   // and becomes dominant before civil twilight. smoothFloor keeps the result
   // C2-continuous and never darkens a naturally brighter solar solution.
   const adaptedMoon=clamp(moonIllumination);
-  const dawnCombinedFloor=-1.94-.66*adaptedMoon+1.20*adaptedMoon*adaptedMoon+.75*smootherstep(-18,-3,elevation);
+  // Match the adapted night plateau across the full useful Story Moon range,
+  // then let increasing dawn radiance take over. The previous quadratic floor
+  // sat 0.3–0.55 EV below the established night level, so a setting Moon made
+  // the frame visibly dim before astronomical dawn brightened it again.
+  const dawnCombinedFloor=-2.08+.98*adaptedMoon+.14*smootherstep(.82,1,adaptedMoon)+.40*smootherstep(-16,-1,elevation);
   const dawnExposure=mix(baseExposure,smoothFloor(baseExposure,dawnCombinedFloor,.16),highMoonDawn);
   // In the evening a bright rising Moon is already contributing real modeled
   // sky illumination before the night-adaptation layer reaches full strength.
@@ -154,7 +158,10 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   // The accent emerges continuously after twilight and grows slightly with
   // dark adaptation. Strong Moonlight makes it more silver, never abruptly
   // switches it off. Tonal masks in the fragment shader keep it out of whites.
-  const nightAccent=nocturnalAdaptation*(.70+.30*s.scotopicAdaptation)*(1-.12*moonNightTone);
+  // Hand chromatic adaptation from night airglow to twilight sky by overlap,
+  // not by allowing one blue source to fade before the next appears.
+  const nocturnalColorBase=1-(1-nocturnalAdaptation)*(1-.38*s.twilight);
+  const nightAccent=nocturnalColorBase*(.70+.30*s.scotopicAdaptation)*(1-.12*moonNightTone);
   const shadows:Vec3=[skyOffset[0]*coolSeparation+moonOffset[0]*moon*.18+nightShadowOffset[0]*nightAccent,skyOffset[1]*coolSeparation+moonOffset[1]*moon*.18+nightShadowOffset[1]*nightAccent,skyOffset[2]*coolSeparation+moonOffset[2]*moon*.18+nightShadowOffset[2]*nightAccent];
   const highlights:Vec3=[sunOffset[0]*warmSeparation,sunOffset[1]*warmSeparation,sunOffset[2]*warmSeparation];
   // The source may contain few specular highlights (common in visual-novel

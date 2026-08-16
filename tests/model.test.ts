@@ -184,6 +184,19 @@ test("a high Story Moon hands off smoothly into astronomical dawn",()=>{
   assert.ok(daylightAt(4.5,base,null,ATMOSPHERE_PRESETS.Standard,fullMoon).grade.exposure>daylightAt(4.5,base,null,ATMOSPHERE_PRESETS.Standard,moonless).grade.exposure+.7);
 });
 
+test("every useful Story Moon phase crosses pre-dawn without an exposure or blue-color valley",()=>{
+  const base=new Date("2026-08-16T12:00:00-03:00"),config=(illuminatedFraction:number)=>({illuminatedFraction,transitHour:0,maximumElevation:68,waxing:true});
+  for(const illumination of [.25,.5,.73,.8,.95,1]){
+    const midnight=daylightAt(0,base,null,ATMOSPHERE_PRESETS.Standard,config(illumination)).grade;
+    const dawn=[];
+    for(let minute=3*60;minute<=5*60;minute+=5)dawn.push(daylightAt(minute/60,base,null,ATMOSPHERE_PRESETS.Standard,config(illumination)).grade);
+    assert.ok(Math.min(...dawn.map(g=>g.exposure))>=midnight.exposure-.16,`${illumination*100}% Moon created a pre-dawn exposure valley`);
+  }
+  const early=daylightAt(4.25).grade,astronomical=daylightAt(4.75).grade;
+  assert.ok(astronomical.shadows[2]-astronomical.shadows[0]>.052,"twilight blue must overlap the fading night-blue adaptation");
+  assert.ok(early.shadows[2]-early.shadows[0]>astronomical.shadows[2]-astronomical.shadows[0],"dawn blue should relax continuously rather than reverse");
+});
+
 test("true night evolves through afterglow, story moon, and pre-dawn",()=>{
   const evening=daylightAt(20.25),late=daylightAt(22),midnight=daylightAt(0),preDawn=daylightAt(4);
   const moonless={illuminatedFraction:.001,transitHour:0,maximumElevation:68,waxing:true};
