@@ -106,9 +106,15 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   // This morning-only floor approximates log-domain source combination: it
   // becomes relevant only for a high Story Moon, rises with dawn radiance, and
   // naturally stops affecting the image once the solar exposure exceeds it.
-  const highMoonDawn=storySky*(1-s.evening)*smootherstep(.55,.95,moonIllumination)*smootherstep(-30,-18,elevation);
-  const dawnCombinedFloor=-2.65+1.50*Math.pow(clamp(moonIllumination),2)+.65*smootherstep(-18,-2,elevation);
-  const exposure=mix(baseExposure,smoothFloor(baseExposure,dawnCombinedFloor),highMoonDawn);
+  const highMoonDawn=storySky*(1-s.evening)*smootherstep(.20,.55,moonIllumination)*smootherstep(-32,-21,elevation);
+  // Preserve the adapted night level while a setting Moon hands illumination
+  // over to the brightening dawn sky. The quadratic lunar term respects the
+  // phase response; the overlapping dawn term begins at astronomical twilight
+  // and becomes dominant before civil twilight. smoothFloor keeps the result
+  // C2-continuous and never darkens a naturally brighter solar solution.
+  const adaptedMoon=clamp(moonIllumination);
+  const dawnCombinedFloor=-1.94-.66*adaptedMoon+1.20*adaptedMoon*adaptedMoon+.75*smootherstep(-18,-3,elevation);
+  const exposure=mix(baseExposure,smoothFloor(baseExposure,dawnCombinedFloor,.16),highMoonDawn);
   const temperature=s.sunWarmth*(.40+.16*eveningBias)-s.skyCoolness*.12*s.twilight-s.night*.25-.07*deepNightDensity-.04*s.preDawnAirglow+afternoonWarmth*.11-morningFreshness*.025-.018*moon+.090*storyGolden
     +.180*morningCharacter-.080*noonCrown+.220*afternoonCharacter;
   const tint=clamp(s.sunIlluminant.tint*.08+s.skyIlluminant.tint*.04,-.04,.04)+eveningBias*lowSun*.024;

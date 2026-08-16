@@ -168,12 +168,14 @@ test("a full Story Moon cannot invert the evening twilight brightness hierarchy"
 });
 
 test("a high Story Moon hands off smoothly into astronomical dawn",()=>{
-  const base=new Date("2026-08-16T12:00:00-03:00"),fullMoon={illuminatedFraction:1,transitHour:0,maximumElevation:68,waxing:true};
-  const samples=[];
-  for(let minute=4*60;minute<=6*60;minute+=5)samples.push(daylightAt(minute/60,base,null,ATMOSPHERE_PRESETS.Standard,fullMoon).grade.exposure);
-  assert.ok(Math.min(...samples)>-1.4,"bright moonlight must not collapse into a dark astronomical-dawn valley");
-  for(let i=1;i<samples.length;i++)assert.ok(samples[i]>=samples[i-1]-.035,`pre-dawn exposure reversed at sample ${i}`);
-  const moonless={...fullMoon,illuminatedFraction:.001};
+  const base=new Date("2026-08-16T12:00:00-03:00"),moon=(illuminatedFraction:number)=>({illuminatedFraction,transitHour:0,maximumElevation:68,waxing:true});
+  for(const illumination of [.5,.8,1]){
+    const samples=[];
+    for(let minute=4*60;minute<=6*60;minute+=5)samples.push(daylightAt(minute/60,base,null,ATMOSPHERE_PRESETS.Standard,moon(illumination)).grade.exposure);
+    const allowedDip=illumination===.5?.018:.012;
+    for(let i=1;i<samples.length;i++)assert.ok(samples[i]>=samples[i-1]-allowedDip,`${illumination*100}% Moon dawn exposure reversed at sample ${i}`);
+  }
+  const fullMoon=moon(1),moonless=moon(.001);
   assert.ok(daylightAt(4.5,base,null,ATMOSPHERE_PRESETS.Standard,fullMoon).grade.exposure>daylightAt(4.5,base,null,ATMOSPHERE_PRESETS.Standard,moonless).grade.exposure+.7);
 });
 

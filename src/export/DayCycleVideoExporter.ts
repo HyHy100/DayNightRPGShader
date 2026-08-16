@@ -8,19 +8,15 @@ function roundedRect(context:CanvasRenderingContext2D,x:number,y:number,width:nu
   const r=Math.min(radius,width/2,height/2);context.beginPath();context.roundRect(x,y,width,height,r);context.fill();
 }
 
-function drawOverlay(context:CanvasRenderingContext2D,width:number,height:number,time:string,name:string,comparison:boolean){
+function drawOverlay(context:CanvasRenderingContext2D,width:number,height:number,time:string,comparison:boolean){
   const scale=height/1080,cx=width/2;
   context.save();context.textAlign="center";context.textBaseline="middle";
-  context.font=`600 ${Math.round(18*scale)}px ui-monospace, SFMono-Regular, Menlo, monospace`;
-  const timeWidth=context.measureText(time).width;
-  context.font=`${Math.round(46*scale)}px Georgia, "Times New Roman", serif`;
-  const nameWidth=context.measureText(name).width,boxWidth=Math.max(nameWidth,timeWidth)+72*scale,boxHeight=116*scale;
+  context.font=`600 ${Math.round(22*scale)}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+  const timeWidth=context.measureText(time).width,boxWidth=timeWidth+64*scale,boxHeight=56*scale;
   const boxTop=38*scale,cy=boxTop+boxHeight/2;
   context.fillStyle="rgba(5, 6, 7, .48)";roundedRect(context,cx-boxWidth/2,boxTop,boxWidth,boxHeight,12*scale);
-  context.shadowColor="rgba(0,0,0,.9)";context.shadowBlur=18*scale;context.fillStyle="#f2eee5";
-  context.fillText(name,cx,cy+15*scale);
-  context.shadowBlur=10*scale;context.font=`600 ${Math.round(18*scale)}px ui-monospace, SFMono-Regular, Menlo, monospace`;context.fillStyle="#e9b866";
-  context.fillText(time,cx,cy-28*scale);
+  context.shadowColor="rgba(0,0,0,.9)";context.shadowBlur=12*scale;context.fillStyle="#e9b866";
+  context.fillText(time,cx,cy);
   if(comparison){
     context.shadowBlur=0;context.fillStyle="rgba(244,241,234,.82)";context.fillRect(cx-.75*scale,0,1.5*scale,height);
     context.font=`700 ${Math.round(12*scale)}px Inter, ui-sans-serif, system-ui, sans-serif`;context.letterSpacing=`${2*scale}px`;
@@ -64,7 +60,7 @@ export class DayCycleVideoExporter {
       const renderAt=(progress:number)=>{
         const sample=sampleDayCycleTimeline(options.date,progress),model=daylightAt(sample.hour,sample.date,options.location,options.profile,options.storyMoon);
         renderer!.setGrade(model.grade);renderer!.renderFrame();context.drawImage(renderCanvas,0,0,width,height);
-        drawOverlay(context,width,height,formatTime(sample.hour),model.grade.name,options.composition==="comparison");
+        drawOverlay(context,width,height,formatTime(sample.hour),options.composition==="comparison");
       };
       renderAt(0);
       const bitrate=options.resolution==="1080p"?12_000_000:7_000_000;
