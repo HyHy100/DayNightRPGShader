@@ -54,7 +54,7 @@ The fragment pipeline is:
 2. apply exposure in linear light;
 3. perform a Bradford-derived chromatic adaptation for temperature and tint;
 4. apply lift/gamma/gain and luminance-masked shadow, midtone, and highlight density;
-5. shape pivoted log contrast, black point, and local tonal clarity;
+5. apply continuous exposure-driven day-for-night suppression to sunlit mids/highs, then shape pivoted log contrast, black point, and local tonal clarity;
 6. apply luminance-preserving saturation/vibrance with skin-like hue protection;
 7. soft-compress out-of-gamut excursions;
 8. map into a compressive domain and sample a genuine 32³ creative film-stock LUT stored as a 256×128 2D atlas with trilinear interpolation across blue slices;

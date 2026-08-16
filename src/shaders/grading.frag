@@ -54,6 +54,14 @@ vec3 grade(vec3 source) {
   c *= exp2(uExposure);
   c = chromaticAdaptation(c, uTemperature, uTint);
 
+  // Day-for-night shaping is continuous and exposure-driven: it suppresses the
+  // telltale sunlit mid/high range without crushing low-luminance scene detail.
+  float dayForNight = smoothstep(0.35, 1.05, -uExposure);
+  float daylightY = luminance(c);
+  float sunlitMask = smoothstep(0.045, 0.52, daylightY);
+  c *= 1.0 - dayForNight * sunlitMask * 0.30;
+  c = mix(c, vec3(luminance(c)), dayForNight * sunlitMask * 0.12);
+
   // Log-like lift/gamma/gain preserves ordering and keeps negative excursions controlled.
   c = max(c + uLift, vec3(0.0));
   c = pow(max(c, vec3(1e-6)), 1.0 / max(uGamma, vec3(0.1))) * uGain;
