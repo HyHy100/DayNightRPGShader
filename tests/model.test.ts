@@ -161,6 +161,16 @@ test("Story Sky supplies an authorable Moon without device location",()=>{
   assert.ok(fallback.atmosphere.moonlightContribution>.3);
 });
 
+test("Story Moon illumination uses the full authoring range without a full-Moon cliff",()=>{
+  const profile=ATMOSPHERE_PRESETS.Standard;
+  const intensity=(fraction:number)=>calculateStoryMoonlight(0,profile,{illuminatedFraction:fraction,transitHour:0,maximumElevation:68,waxing:true}).normalizedIntensity;
+  const samples=[.01,.10,.25,.50,.75,.90,.95,.98,1].map(intensity);
+  for(let i=1;i<samples.length;i++)assert.ok(samples[i]>samples[i-1],`phase response must rise at sample ${i}`);
+  assert.ok(samples[3]-samples[2]>.08,"quarter-to-half Moon must have a useful visual range");
+  assert.ok(samples[7]-samples[6]>.03,"95–98% must remain responsive");
+  assert.ok(samples[8]-samples[7]<.15,"98–100% must not behave like a switch");
+});
+
 test("Bird-style clear-sky energy closes and remains physical",()=>{
   for(const elevation of [2,10,30,60,85]){
     const result=calculateClearSkyIrradiance(elevation,1,ATMOSPHERE_PRESETS.Standard);

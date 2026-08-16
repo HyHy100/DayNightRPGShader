@@ -46,10 +46,14 @@ export function unavailableMoonlight():MoonlightState{
 
 export const UNAVAILABLE_MOONLIGHT=unavailableMoonlight();
 
-function calculateFromPosition(position:LunarPosition,profile:AtmosphereProfile,quality:MoonlightState["quality"]):MoonlightState{
-  const alpha=Math.abs(position.phaseAngle);
+function physicalLunarPhaseBrightness(alpha:number){
   // Krisciunas–Schaefer lunar phase function, normalized to full Moon.
-  const phaseBrightness=Math.pow(10,-.4*(.026*alpha+4e-9*alpha**4));
+  return Math.pow(10,-.4*(.026*alpha+4e-9*alpha**4));
+}
+
+function calculateFromPosition(position:LunarPosition,profile:AtmosphereProfile,quality:MoonlightState["quality"],phaseBrightnessOverride?:number):MoonlightState{
+  const alpha=Math.abs(position.phaseAngle);
+  const phaseBrightness=phaseBrightnessOverride??physicalLunarPhaseBrightness(alpha);
   const distanceScale=(384400/position.distanceKm)**2;
   const topOfAtmosphereIlluminanceLux=.36*phaseBrightness*distanceScale;
   const opticalAirMass=lunarAirMass(position.geometricElevation);
@@ -94,5 +98,14 @@ export function calculateStoryMoonlight(hour:number,profile:AtmosphereProfile,co
   const position:LunarPosition={elevation,geometricElevation,azimuth:((180+hourAngle)%360+360)%360,zenith:90-geometricElevation,
     rightAscension:0,declination:0,distanceKm:384400,horizontalParallax:.9507,phaseAngle,illuminatedFraction:fraction,
     elongation:180-phaseAngle,ageDays:config.waxing?halfMonth*(1-phaseAngle/180):halfMonth*(1+phaseAngle/180),waxing:config.waxing,aboveHorizon:elevation>0};
-  return calculateFromPosition(position,profile,"story-sky");
+  // Illuminated fraction is geometric, while the physical lunar phase law is
+  // strongly nonlinear and includes a near-full opposition surge. That is
+  // correct for a real ephemeris but makes a fictional-scene authoring slider
+  // feel nearly inert until its final few percent. Blend it with a smooth
+  // perceptual response so the complete slider is useful without erasing the
+  // characteristic full-Moon rise. Located mode remains strictly physical.
+  const physicalPhase=physicalLunarPhaseBrightness(phaseAngle);
+  const perceptualPhase=Math.pow(fraction,1.65);
+  const storyPhaseBrightness=.30*physicalPhase+.70*perceptualPhase;
+  return calculateFromPosition(position,profile,"story-sky",storyPhaseBrightness);
 }
