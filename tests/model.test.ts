@@ -40,8 +40,8 @@ test("a full Story Moon adds one-stop adaptation and silver optical response",()
   const half=daylightAt(0,base,null,profile,config(.50)).grade;
   const full=daylightAt(0,base,null,profile,config(1)).grade;
   assert.ok(full.exposure>half.exposure+.9,"full Story Moon should add approximately one photographic stop over half Moon");
-  assert.ok(full.moonGlowStrength>.15,"full Story Moon should drive a visible silver optical response");
-  assert.ok(full.bloomThreshold<half.bloomThreshold-.08,"moonlight must expose usable highlights to the bloom extractor");
+  assert.ok(full.moonGlowStrength>.5,"full Story Moon should drive a visible silver optical response");
+  assert.ok(full.bloomThreshold<.08,"full-Moon extraction must reach highlights in dark story plates");
 });
 
 test("atmospheric influences are smooth and playback is not minute-quantized",()=>{
@@ -120,7 +120,7 @@ test("true night evolves through afterglow, story moon, and pre-dawn",()=>{
   const moonless={illuminatedFraction:.001,transitHour:0,maximumElevation:68,waxing:true};
   const moonlessEvening=daylightAt(20.25,new Date(),null,ATMOSPHERE_PRESETS.Standard,moonless);
   const moonlessLate=daylightAt(22,new Date(),null,ATMOSPHERE_PRESETS.Standard,moonless);
-  assert.equal(evening.grade.name,"Early Night");
+  assert.equal(evening.grade.name,"Moonrise Transition");
   assert.equal(late.grade.name,"Moonlit Night");
   assert.equal(midnight.grade.name,"Moonlit Night");
   assert.equal(preDawn.grade.name,"Pre-dawn Night");
