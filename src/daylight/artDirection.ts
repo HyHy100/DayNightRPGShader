@@ -91,9 +91,18 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   const sunColor=mixOklab(directionalSunColor,[1,.82,.43],.22*storyGolden);
   const skyColor=mixOklab([.93,.97,1],s.skyIlluminant.linearRgb,clamp(.22+.48*s.skyCoolness));
   const moonColor=mixOklab([.94,.97,1],s.moon.spectralIlluminant.linearRgb,.20);
+  // Night is an adapted visual state, not daylight with fewer stops. Build a
+  // restrained cinematic ambient illuminant in perceptual space: indigo/slate
+  // for shadows, steel blue for lower midtones, and a neutral silver Moon.
+  // Keeping these as zero-luminance offsets preserves scene brightness and
+  // prevents the accent from becoming a flat blue overlay.
+  const nightShadowColor=mixOklab([.72,.82,1],[.46,.61,1],.38+.28*s.deepNightDepth);
+  const nightMidtoneColor=mixOklab([.84,.90,1],[.66,.77,.98],.30+.22*s.deepNightDepth);
   const sunOffset=rgbOffset(sunColor,.20+.16*lowSun);
   const skyOffset=rgbOffset(skyColor,.14+.18*(s.rayleigh+s.twilight));
   const moonOffset=rgbOffset(moonColor,.12);
+  const nightShadowOffset=rgbOffset(nightShadowColor,.18);
+  const nightMidtoneOffset=rgbOffset(nightMidtoneColor,.105);
   const warmSeparation=lowSun*(.26+.13*eveningBias)*(.65+.35*s.spectralSeparation)+afternoonWarmth*.10+storyGolden*.16+.25*morningCharacter+.35*afternoonCharacter;
   const coolSeparation=clamp(s.skyCoolness*(.26+.35*(1-noon))+.20*lowSun*(.55+.45*s.spectralSeparation)+.07*morningFreshness+.11*morningCharacter+.13*afternoonCharacter-.100*noonCrown+.06*s.eveningAfterglow+.08*s.preDawnAirglow-.05*deepNightDensity);
   const baseExposure=-.04+.14*noon-.12*(1-noon)*daylight-.08*s.haze*skyIllumination-.03*afternoon
@@ -125,19 +134,26 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   const eveningMoonHandoff=storySky*s.evening*smootherstep(.18,.45,moonIllumination)*eveningMoonWindow;
   const eveningMoonFloor=-1.95+1.45*moon;
   const exposure=mix(dawnExposure,smoothFloor(dawnExposure,eveningMoonFloor,.18),eveningMoonHandoff);
-  const temperature=s.sunWarmth*(.40+.16*eveningBias)-s.skyCoolness*.12*s.twilight-s.night*.25-.07*deepNightDensity-.04*s.preDawnAirglow+afternoonWarmth*.11-morningFreshness*.025-.018*moon+.090*storyGolden
+  // Global adaptation stays modest; most nocturnal color separation belongs
+  // in the tonal zones below, leaving lamps, stars, and Moon-lit highlights
+  // capable of approaching clean white.
+  const temperature=s.sunWarmth*(.40+.16*eveningBias)-s.skyCoolness*.12*s.twilight-s.night*.16-.045*deepNightDensity-.03*s.preDawnAirglow+afternoonWarmth*.11-morningFreshness*.025-.012*moon+.090*storyGolden
     +.180*morningCharacter-.080*noonCrown+.220*afternoonCharacter;
   const tint=clamp(s.sunIlluminant.tint*.08+s.skyIlluminant.tint*.04,-.04,.04)+eveningBias*lowSun*.024;
   const contrast=.025+.070*noon-.13*s.haze*skyIllumination-.05*s.twilight-.025*s.night-.018*afternoonWarmth-.040*morningCharacter+.050*noonCrown-.040*afternoonCharacter;
   const saturation=.015+.055*(1-noon)*daylight+.025*lowSun+.018*afternoonWarmth-.14*s.twilight-.22*s.night-.07*deepNightDensity+.035*s.eveningAfterglow+.025*s.preDawnAirglow+.018*storyGolden+.040*morningCharacter-.012*noonCrown+.050*afternoonCharacter;
   const vibrance=.025+.050*daylight*(1-s.haze)-.09*s.night+.022*storyGolden+.024*morningCharacter+.032*afternoonCharacter;
-  const shadows:Vec3=[skyOffset[0]*coolSeparation+moonOffset[0]*moon*.18,skyOffset[1]*coolSeparation+moonOffset[1]*moon*.18,skyOffset[2]*coolSeparation+moonOffset[2]*moon*.18];
+  // The accent emerges continuously after twilight and grows slightly with
+  // dark adaptation. Strong Moonlight makes it more silver, never abruptly
+  // switches it off. Tonal masks in the fragment shader keep it out of whites.
+  const nightAccent=s.night*(.70+.30*s.scotopicAdaptation)*(1-.16*moonNightTone);
+  const shadows:Vec3=[skyOffset[0]*coolSeparation+moonOffset[0]*moon*.18+nightShadowOffset[0]*nightAccent,skyOffset[1]*coolSeparation+moonOffset[1]*moon*.18+nightShadowOffset[1]*nightAccent,skyOffset[2]*coolSeparation+moonOffset[2]*moon*.18+nightShadowOffset[2]*nightAccent];
   const highlights:Vec3=[sunOffset[0]*warmSeparation,sunOffset[1]*warmSeparation,sunOffset[2]*warmSeparation];
   // The source may contain few specular highlights (common in visual-novel
   // backgrounds). Let golden light reach upper midtones without warming the
   // black floor or collapsing the direct-sun / cool-sky separation.
   const midtoneSun=.45+.34*storyGolden+.25*morningCharacter+.35*afternoonCharacter;
-  const midtones:Vec3=[highlights[0]*midtoneSun+shadows[0]*.22,highlights[1]*midtoneSun+shadows[1]*.22,highlights[2]*midtoneSun+shadows[2]*.22];
+  const midtones:Vec3=[highlights[0]*midtoneSun+shadows[0]*.16+nightMidtoneOffset[0]*nightAccent,highlights[1]*midtoneSun+shadows[1]*.16+nightMidtoneOffset[1]*nightAccent,highlights[2]*midtoneSun+shadows[2]*.16+nightMidtoneOffset[2]*nightAccent];
   const nightLift=-.007*s.night-.003*deepNightDensity+.002*s.scotopicAdaptation+.001*s.twilight+(.003+.006*storySky)*moonNightTone;
   const lift:Vec3=[nightLift-s.night*.003,nightLift,nightLift+s.night*.004+s.twilight*.001+moon*.001];
   const dayGamma=.010*morningCharacter+.008*noonCrown-.008*afternoonCharacter;

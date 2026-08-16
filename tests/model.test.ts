@@ -203,6 +203,15 @@ test("true night evolves through afterglow, story moon, and pre-dawn",()=>{
   assert.ok(preDawn.atmosphere.nightProgress>midnight.atmosphere.nightProgress);
 });
 
+test("night uses tonal blue separation instead of a flat global cast",()=>{
+  const night=daylightAt(0).grade,noon=daylightAt(12.25).grade;
+  assert.ok(night.shadows[2]>night.shadows[0]+.025,"night shadows should carry a visible indigo-blue ambient accent");
+  assert.ok(night.midtones[2]>night.midtones[0]+.010,"night lower midtones should retain a restrained steel-blue trace");
+  assert.ok(Math.abs(night.highlights[2]-night.highlights[0])<.012,"night highlights should remain neutral/silver rather than blue");
+  assert.ok(night.shadows[2]-night.shadows[0]>noon.shadows[2]-noon.shadows[0]+.018,"night separation must be distinct from neutral daylight");
+  assert.ok(Math.abs(night.temperature)<.5,"artistic night must not rely on an extreme global white-balance shift");
+});
+
 test("Story Sky solar timing comes from one coherent temperate geometry",()=>{
   const noon=daylightAt(12.25).atmosphere,events=noon.events;
   assert.ok(Math.abs(noon.geometricElevation-63)<.1,"noon altitude must match latitude minus declination");
