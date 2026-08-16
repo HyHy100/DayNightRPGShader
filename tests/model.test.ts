@@ -41,6 +41,16 @@ test("daylight stages are meaningfully distinct without preset tables",()=>{
   assert.ok(golden.atmosphere.lowSunFactor>.4);
 });
 
+test("twilight exposure darkens monotonically below daytime",()=>{
+  const nearest=(target:number)=>{let best=daylightAt(0),error=Infinity;for(let minute=0;minute<1440;minute++){const state=daylightAt(minute/60),next=Math.abs(state.atmosphere.geometricElevation-target);if(next<error){best=state;error=next;}}return best.grade;};
+  const noon=nearest(60),civil=nearest(-3),nautical=nearest(-9),astronomical=nearest(-15),night=nearest(-21);
+  assert.ok(noon.exposure>civil.exposure+.3);
+  assert.ok(civil.exposure>nautical.exposure+.3);
+  assert.ok(nautical.exposure>astronomical.exposure+.6);
+  assert.ok(astronomical.exposure>night.exposure);
+  for(const grade of [noon,civil,nautical,astronomical,night])assert.ok(grade.blackPoint>=0,"twilight toe must not lift the black point");
+});
+
 test("true night evolves through afterglow, anti-solar midnight, and pre-dawn",()=>{
   const evening=daylightAt(19),late=daylightAt(21),midnight=daylightAt(0),preDawn=daylightAt(5);
   assert.equal(evening.grade.name,"Early Night");
@@ -92,7 +102,9 @@ test("located clear-sky quantities remain continuous at ten-second resolution",(
     assert.ok(Math.abs(current.atmosphere.irradiance.dhi-previous.atmosphere.irradiance.dhi)<1,"DHI derivative spike");
     assert.ok(Math.abs(current.atmosphere.irradiance.ghi-previous.atmosphere.irradiance.ghi)<1,"GHI derivative spike");
     assert.ok(Math.abs(current.atmosphere.sunCCT-previous.atmosphere.sunCCT)<15,"sun CCT derivative spike");
-    assert.ok(Math.abs(current.grade.exposure-previous.grade.exposure)<.003,"exposure derivative spike");
+    // A 0.006 EV / 10 s bound is visually sub-threshold while allowing the
+    // physically rapid but still smooth irradiance change at the horizon.
+    assert.ok(Math.abs(current.grade.exposure-previous.grade.exposure)<.006,"exposure derivative spike");
     previous=current;
   }
 });

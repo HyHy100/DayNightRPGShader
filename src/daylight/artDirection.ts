@@ -10,7 +10,10 @@ export interface DaylightGrade {
 const clamp=(x:number,a=0,b=1)=>Math.max(a,Math.min(b,x));
 
 export function daylightPhase(s:AtmosphereState){
-  const e=s.elevation;
+  // Twilight definitions use the unrefracted solar-disc center. Apparent
+  // elevation has a piecewise near-horizon refraction correction and is not a
+  // safe continuous control signal for grading.
+  const e=s.geometricElevation;
   if(e<-18){
     if(s.eveningAfterglow>.12)return ["Early Night","Residual upper-atmosphere glow fading into night"] as const;
     if(s.preDawnAirglow>.12)return ["Pre-dawn Night","Airglow strengthening before astronomical dawn"] as const;
@@ -28,22 +31,28 @@ export function daylightPhase(s:AtmosphereState){
 
 /** Maps continuous atmospheric physics into restrained photographic controls. */
 export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGrade{
+  const elevation=s.geometricElevation;
   const daylight=1-s.night;
   const lowSun=s.lowSunFactor;
   const skyIllumination=clamp(s.skyIrradiance+s.twilight*.18);
-  const noon=Math.pow(clamp(Math.sin(Math.max(0,s.elevation)*Math.PI/180)),.7);
-  const afternoon=smootherstep(.5,.98,s.dayProgress)*smootherstep(-2,10,s.elevation);
+  const noon=Math.pow(clamp(Math.sin(Math.max(0,elevation)*Math.PI/180)),.7);
+  const afternoon=smootherstep(.5,.98,s.dayProgress)*smootherstep(-2,10,elevation);
   const afternoonWarmth=afternoon*Math.pow(1-noon,.65);
-  const morningFreshness=(1-s.evening)*smootherstep(0,12,s.elevation)*(1-smootherstep(28,48,s.elevation));
+  const morningFreshness=(1-s.evening)*smootherstep(0,12,elevation)*(1-smootherstep(28,48,elevation));
   const eveningBias=s.evening*(.25+.75*lowSun);
   const deepNightDensity=s.night*(.60*s.deepNightDepth+.40*s.midnightDepth);
+  // A broad C2 ramp makes exposure strictly follow solar depression without
+  // the derivative peaks produced by stacked twilight "mode" curves.
+  const solarDarkening=1-smootherstep(-30,15,elevation);
   const sunColor=mixOklab([1,.985,.95],s.sunIlluminant.linearRgb,clamp(.30+.55*s.sunWarmth));
   const skyColor=mixOklab([.93,.97,1],s.skyIlluminant.linearRgb,clamp(.22+.48*s.skyCoolness));
   const sunOffset=rgbOffset(sunColor,.20+.16*lowSun);
   const skyOffset=rgbOffset(skyColor,.14+.18*(s.rayleigh+s.twilight));
   const warmSeparation=lowSun*(.26+.13*eveningBias)*(.65+.35*s.spectralSeparation)+afternoonWarmth*.10;
   const coolSeparation=clamp(s.skyCoolness*(.26+.35*(1-noon))+.20*lowSun*(.55+.45*s.spectralSeparation)+.07*morningFreshness+.06*s.eveningAfterglow+.08*s.preDawnAirglow-.05*deepNightDensity);
-  const exposure=-1.42+1.38*skyIllumination+.18*s.sunIntensity+.08*noon-.13*s.haze*skyIllumination-.04*afternoon-.18*deepNightDensity+.14*s.eveningAfterglow+.11*s.preDawnAirglow+.06*s.scotopicAdaptation;
+  const exposure=-.04+.14*noon-.12*(1-noon)*daylight-.08*s.haze*skyIllumination-.03*afternoon
+    -3.0*solarDarkening-.20*deepNightDensity
+    +.05*s.eveningAfterglow+.04*s.preDawnAirglow+.025*s.scotopicAdaptation;
   const temperature=s.sunWarmth*(.40+.16*eveningBias)-s.skyCoolness*.12*s.twilight-s.night*.25-.07*deepNightDensity-.04*s.preDawnAirglow+afternoonWarmth*.11-morningFreshness*.025;
   const tint=clamp(s.sunIlluminant.tint*.08+s.skyIlluminant.tint*.04,-.04,.04)+eveningBias*lowSun*.024;
   const contrast=.025+.070*noon-.13*s.haze*skyIllumination-.05*s.twilight-.025*s.night-.018*afternoonWarmth;
@@ -52,13 +61,13 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   const shadows:Vec3=[skyOffset[0]*coolSeparation,skyOffset[1]*coolSeparation,skyOffset[2]*coolSeparation];
   const highlights:Vec3=[sunOffset[0]*warmSeparation,sunOffset[1]*warmSeparation,sunOffset[2]*warmSeparation];
   const midtones:Vec3=[highlights[0]*.45+shadows[0]*.22,highlights[1]*.45+shadows[1]*.22,highlights[2]*.45+shadows[2]*.22];
-  const nightLift=-.006*s.night-.003*deepNightDensity+.003*s.scotopicAdaptation+.004*s.twilight;
-  const lift:Vec3=[nightLift-s.night*.003,nightLift,nightLift+s.night*.005+s.twilight*.003];
-  const gamma:Vec3=[1-.028*s.night+.008*s.haze,1-.012*s.night+.008*s.haze,1+.012*s.night+.008*s.twilight];
+  const nightLift=-.007*s.night-.003*deepNightDensity+.002*s.scotopicAdaptation+.001*s.twilight;
+  const lift:Vec3=[nightLift-s.night*.003,nightLift,nightLift+s.night*.004+s.twilight*.001];
+  const gamma:Vec3=[1-.030*s.night+.006*s.haze,1-.014*s.night+.006*s.haze,1+.009*s.night+.003*s.twilight];
   const gain:Vec3=[1-.055*s.night+highlights[0]*.22,1-.025*s.night+highlights[1]*.22,1+.010*s.night+highlights[2]*.22];
   const [name,description]=daylightPhase(s);
   return {hour,name,description,exposure,temperature,tint,contrast,saturation,vibrance,lift,gamma,gain,shadows,midtones,highlights,
-    blackPoint:.004+.008*s.night+.007*deepNightDensity-.005*s.scotopicAdaptation-.010*s.twilight,
+    blackPoint:.003+.010*s.night+.007*deepNightDensity-.003*s.scotopicAdaptation+.002*s.twilight,
     highlightRolloff:.28+.25*noon+.20*lowSun+.16*s.twilight+.14*s.night,
     clarity:.065*noon-.055*s.haze-.025*s.twilight,
     filmStrength:.42+.20*lowSun+.18*s.twilight+.20*s.night+.08*deepNightDensity};
