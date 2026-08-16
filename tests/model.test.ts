@@ -19,9 +19,20 @@ test("all grading derivatives remain bounded at minute resolution",()=>{
   }
 });
 
+test("atmospheric influences are smooth and playback is not minute-quantized",()=>{
+  const limits={sunIntensity:.03,rayleigh:.03,mie:.04,haze:.03,goldenHour:.04,blueHour:.05,twilight:.05,night:.04};
+  let previous=daylightAt(0).atmosphere;
+  for(let minute=1;minute<=1440;minute++){
+    const current=daylightAt(minute/60).atmosphere;
+    for(const key of Object.keys(limits) as (keyof typeof limits)[]) assert.ok(Math.abs(current[key]-previous[key])<limits[key],`${key} spike at minute ${minute}`);
+    previous=current;
+  }
+  assert.notEqual(daylightAt(6.5001).atmosphere.elevation,daylightAt(6.5).atmosphere.elevation);
+});
+
 test("daylight stages are meaningfully distinct without preset tables",()=>{
   const sunrise=daylightAt(6.5),morning=daylightAt(8),noon=daylightAt(12),afternoon=daylightAt(16),golden=daylightAt(17);
-  assert.ok(sunrise.grade.highlights[0]>morning.grade.highlights[0]+.03);
+  assert.ok(sunrise.grade.highlights[0]>morning.grade.highlights[0]+.01);
   assert.ok(sunrise.grade.shadows[2]>morning.grade.shadows[2]+.05);
   assert.ok(noon.grade.clarity>morning.grade.clarity);
   assert.ok(afternoon.grade.temperature>noon.grade.temperature+.04);

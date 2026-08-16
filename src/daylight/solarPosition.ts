@@ -66,7 +66,7 @@ export function calculateSolarEvents(date: Date, location: GeoLocation): SolarEv
 /** NOAA-derived apparent solar position with refraction near the horizon. */
 export function calculateSolarPosition(date: Date, location: GeoLocation): SolarPosition {
   const {declination,equationOfTime}=solarTerms(date);
-  const minutes=date.getHours()*60+date.getMinutes()+date.getSeconds()/60;
+  const minutes=date.getHours()*60+date.getMinutes()+date.getSeconds()/60+date.getMilliseconds()/60000;
   const tz=-date.getTimezoneOffset();
   const trueSolar=normMinutes(minutes+equationOfTime+4*location.lon-tz);
   const hourAngle=(trueSolar/4<0?trueSolar/4+180:trueSolar/4-180);
@@ -84,7 +84,7 @@ export function calculateSolarPosition(date: Date, location: GeoLocation): Solar
 
 /** Clock-only fallback still produces a continuous solar-like state. */
 export function calculateFallbackSolarPosition(date: Date): SolarPosition {
-  const h=date.getHours()+date.getMinutes()/60+date.getSeconds()/3600;
+  const h=date.getHours()+date.getMinutes()/60+date.getSeconds()/3600+date.getMilliseconds()/3600000;
   const solarTime=h;
   const hourAngle=(h-12)*15;
   // A C2-smooth 6:00–18:00 reference arc, extended below the horizon at night.

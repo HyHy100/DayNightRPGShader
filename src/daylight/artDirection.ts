@@ -30,7 +30,7 @@ export function daylightPhase(s:AtmosphereState){
 export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGrade{
   const daylight=1-s.night;
   const lowSun=s.goldenHour;
-  const skyIllumination=smootherstep(-18,2,s.elevation);
+  const skyIllumination=smootherstep(-20,4,s.elevation);
   const noon=Math.pow(clamp(Math.sin(Math.max(0,s.elevation)*Math.PI/180)),.7);
   const afternoon=smootherstep(.5,.98,s.dayProgress)*smootherstep(-2,10,s.elevation);
   const afternoonWarmth=afternoon*Math.pow(1-noon,.65);
@@ -39,10 +39,10 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   const deepNightDensity=s.night*(.60*s.deepNightDepth+.40*s.midnightDepth);
   const sunColor=mixOklab([1,.985,.95],[1,.48,.16],clamp(s.sunWarmth*(.72+.18*eveningBias)));
   const skyColor=mixOklab([.93,.97,1],[.36,.62,1],clamp(s.skyCoolness*.72));
-  const sunOffset=rgbOffset(sunColor,.23+.30*lowSun);
+  const sunOffset=rgbOffset(sunColor,.20+.16*lowSun);
   const skyOffset=rgbOffset(skyColor,.16+.20*(s.rayleigh+s.blueHour));
-  const warmSeparation=lowSun*(.58+.24*eveningBias)+afternoonWarmth*.10;
-  const coolSeparation=clamp(s.skyCoolness*(.28+.42*(1-noon))+.24*lowSun+.08*morningFreshness+.06*s.eveningAfterglow+.08*s.preDawnAirglow-.05*deepNightDensity);
+  const warmSeparation=lowSun*(.32+.14*eveningBias)+afternoonWarmth*.10;
+  const coolSeparation=clamp(s.skyCoolness*(.26+.35*(1-noon))+.13*lowSun+.07*morningFreshness+.06*s.eveningAfterglow+.08*s.preDawnAirglow-.05*deepNightDensity);
   const exposure=-1.42+1.46*skyIllumination+.13*noon-.14*s.haze*skyIllumination-.04*afternoon-.18*deepNightDensity+.14*s.eveningAfterglow+.11*s.preDawnAirglow+.06*s.scotopicAdaptation;
   const temperature=s.sunWarmth*(.44+.18*eveningBias)-s.blueHour*.20-s.night*.25-.07*deepNightDensity-.04*s.preDawnAirglow+afternoonWarmth*.11-morningFreshness*.025;
   const tint=eveningBias*lowSun*.030-s.blueHour*.008;

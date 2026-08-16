@@ -5,7 +5,7 @@ export const smootherstep=(a:number,b:number,x:number)=>{const t=clamp01((x-a)/(
 const gaussian=(x:number,c:number,w:number)=>Math.exp(-.5*((x-c)/w)**2);
 
 export interface AtmosphereState extends SolarPosition {
-  solarDepression:number; airMass:number; sunIntensity:number; directDiffuseRatio:number;
+  solarDepression:number; airMass:number; sunIntensity:number; skyIrradiance:number; directDiffuseRatio:number;
   sunCCT:number; skyCCT:number; sunWarmth:number; skyCoolness:number; rayleigh:number;
   mie:number; haze:number; goldenHour:number; blueHour:number; twilight:number; night:number;
   deepNightDepth:number; nightProgress:number; midnightDepth:number; eveningAfterglow:number;
@@ -21,16 +21,22 @@ export function calculateAirMass(elevation:number){
 export function calculateAtmosphereState(solar:SolarPosition):AtmosphereState{
   const e=solar.elevation;
   const airMass=calculateAirMass(e);
-  const above=smootherstep(-6,8,e);
+  const above=smootherstep(-10,15,e);
   const altitude=clamp01(Math.sin(Math.max(0,e)*Math.PI/180));
-  const sunIntensity=above*Math.pow(altitude,.32)*Math.exp(-.025*Math.max(0,airMass-1));
-  const horizon=gaussian(e,1.5,9.5);
+  // Soften the geometric irradiance onset. A sub-unit power of sin(elevation)
+  // has an infinite slope at the horizon and caused a visible flash.
+  const geometricIntensity=smootherstep(0,.30,altitude)*(.45+.55*Math.sqrt(altitude));
+  const sunIntensity=above*geometricIntensity*Math.exp(-.025*Math.max(0,airMass-1));
+  const skyIrradiance=smootherstep(-24,18,e)*(.22+.78*smootherstep(0,.55,altitude));
+  const horizon=gaussian(e,1.5,15);
   const mie=clamp01(horizon*(.45+.55*clamp01((airMass-1)/12)));
-  const rayleigh=clamp01(.28+.62*(1-Math.pow(altitude,.45)))*smootherstep(-17,-4,e);
-  const twilight=smootherstep(-18,-10,e)*(1-smootherstep(-2,3,e));
-  const blueHour=gaussian(e,-4.5,5.5)*(1-smootherstep(0,8,e));
-  const goldenHour=gaussian(e,5,8)*smootherstep(-4,1,e);
-  const night=1-smootherstep(-18,-12,e);
+  const rayleigh=clamp01(.28+.62*Math.pow(1-altitude,.65))*smootherstep(-24,-4,e);
+  // Broad elevation bands overlap deliberately. The former Gaussian peaks
+  // read as temporal pulses when the sun moved quickly near the horizon.
+  const twilight=smootherstep(-24,-10,e)*(1-smootherstep(-8,6,e));
+  const blueHour=smootherstep(-22,-8,e)*(1-smootherstep(-7,12,e));
+  const goldenHour=smootherstep(-14,4,e)*(1-smootherstep(6,30,e));
+  const night=1-smootherstep(-24,-8,e);
   const deepNightDepth=night*smootherstep(18,65,Math.max(0,-e));
   // Follow the sun around the dark hemisphere: approximately 0 at evening
   // horizon, .5 at anti-solar midnight and 1 at the morning horizon. This
@@ -54,5 +60,5 @@ export function calculateAtmosphereState(solar:SolarPosition):AtmosphereState{
   const clock=solar.solarTime;
   const evening=solar.hourAngle>=0?1:0;
   const dayProgress=clock<=solarNoon ? .5*(clock-sunrise)/Math.max(.1,solarNoon-sunrise) : .5+.5*(clock-solarNoon)/Math.max(.1,sunset-solarNoon);
-  return {...solar,solarDepression:Math.max(0,-e),airMass,sunIntensity,directDiffuseRatio,sunCCT,skyCCT,sunWarmth,skyCoolness,rayleigh,mie,haze,goldenHour,blueHour,twilight,night,deepNightDepth,nightProgress,midnightDepth,eveningAfterglow,preDawnAirglow,scotopicAdaptation,dayProgress:clamp01(dayProgress),evening};
+  return {...solar,solarDepression:Math.max(0,-e),airMass,sunIntensity,skyIrradiance,directDiffuseRatio,sunCCT,skyCCT,sunWarmth,skyCoolness,rayleigh,mie,haze,goldenHour,blueHour,twilight,night,deepNightDepth,nightProgress,midnightDepth,eveningAfterglow,preDawnAirglow,scotopicAdaptation,dayProgress:clamp01(dayProgress),evening};
 }

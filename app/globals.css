@@ -73,8 +73,8 @@ input[type="range"]::-webkit-slider-thumb { appearance: none; width: 14px; heigh
 .day-curve { width: 100%; height: 84px; display: block; margin: 4px 0 7px; border: 1px solid #ffffff0b; border-radius: 6px; background: #090a0b; }
 .curve-legend { display: flex; gap: 12px; margin-bottom: 14px; color: #686b6d; font-size: 8px; }
 .curve-legend span::before { content: ""; display: inline-block; width: 5px; height: 5px; border-radius: 50%; margin-right: 5px; background: #e8b562; }
-.curve-legend span:nth-child(2)::before { background: #6f9fd0; }
-.curve-legend span:nth-child(3)::before { background: #d86f4a; }
+.curve-legend span:nth-child(2)::before { background: #d86f4a; }
+.curve-legend span:nth-child(3)::before { background: #6f9fd0; }
 .curve-legend span:nth-child(4)::before { background: #766aa8; }
 .metric-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 7px 0; border-top: 1px solid #ffffff08; }
 

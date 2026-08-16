@@ -4,7 +4,11 @@ import { calculateFallbackSolarPosition, calculateSolarPosition, type GeoLocatio
 
 export interface DaylightModel { grade:DaylightGrade; atmosphere:AtmosphereState }
 export const localClockHours=(d=new Date())=>d.getHours()+d.getMinutes()/60+d.getSeconds()/3600;
-export function dateAtHour(hour:number,base=new Date()){const d=new Date(base);const total=Math.round((((hour%24)+24)%24)*60);d.setHours(Math.floor(total/60),total%60,0,0);return d;}
+export function dateAtHour(hour:number,base=new Date()){
+  const d=new Date(base),normalized=((hour%24)+24)%24,totalMs=normalized*3600000;
+  d.setHours(Math.floor(totalMs/3600000),Math.floor(totalMs/60000)%60,Math.floor(totalMs/1000)%60,Math.floor(totalMs)%1000);
+  return d;
+}
 export function daylightAt(hour:number,base=new Date(),location:GeoLocation|null=null):DaylightModel{
   const date=dateAtHour(hour,base);
   const solar=location?calculateSolarPosition(date,location):calculateFallbackSolarPosition(date);
