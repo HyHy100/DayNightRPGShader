@@ -18,6 +18,9 @@ export class WebGLRenderer {
   private split = .5;
   private comparison: ComparisonMode = "split";
   private frame = 0;
+  private pendingWidth = 1;
+  private pendingHeight = 1;
+  private destroyed = false;
   private resizeObserver: ResizeObserver;
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -30,7 +33,10 @@ export class WebGLRenderer {
     this.shader.use();
     gl.uniform1i(this.shader.uniform("uImage"), 0);
     gl.uniform1i(this.shader.uniform("uFilmLut"), 1);
-    this.resizeObserver = new ResizeObserver(() => requestAnimationFrame(() => this.resize()));
+    // ResizeObserver can fire repeatedly while the panel or viewport is settling.
+    // Only record the desired backing-store size here. Applying it inside the
+    // render callback prevents a canvas resize from exposing its cleared buffer.
+    this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas.parentElement ?? canvas);
     this.resize();
   }
@@ -90,19 +96,22 @@ export class WebGLRenderer {
   private resize() {
     const maxDpr = 2;
     const dpr = Math.min(maxDpr, window.devicePixelRatio || 1);
-    const width = Math.max(1, Math.round(this.canvas.clientWidth * dpr));
-    const height = Math.max(1, Math.round(this.canvas.clientHeight * dpr));
-    if (this.canvas.width !== width || this.canvas.height !== height) {
-      this.canvas.width = width;
-      this.canvas.height = height;
-    }
+    this.pendingWidth = Math.max(1, Math.round(this.canvas.clientWidth * dpr));
+    this.pendingHeight = Math.max(1, Math.round(this.canvas.clientHeight * dpr));
     this.draw();
   }
 
   private draw() {
-    cancelAnimationFrame(this.frame);
+    // Coalesce uniform and resize updates without canceling the pending frame.
+    // Cancel-and-reschedule can starve rendering during 60 fps time playback.
+    if (this.frame || this.destroyed) return;
     this.frame = requestAnimationFrame(() => {
+      this.frame = 0;
       const { gl, shader: s, canvas } = this;
+      if (canvas.width !== this.pendingWidth || canvas.height !== this.pendingHeight) {
+        canvas.width = this.pendingWidth;
+        canvas.height = this.pendingHeight;
+      }
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.clearColor(.018, .019, .020, 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
@@ -123,5 +132,5 @@ export class WebGLRenderer {
     });
   }
 
-  destroy() { cancelAnimationFrame(this.frame); this.resizeObserver.disconnect(); }
+  destroy() { this.destroyed = true; cancelAnimationFrame(this.frame); this.frame = 0; this.resizeObserver.disconnect(); }
 }
