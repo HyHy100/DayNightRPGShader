@@ -11,9 +11,15 @@ export interface DaylightGrade {
 }
 const clamp=(x:number,a=0,b=1)=>Math.max(a,Math.min(b,x));
 const mix=(a:number,b:number,t:number)=>a+(b-a)*t;
-// C2-continuous lower bound. Unlike max(), this does not introduce a visible
-// derivative corner when two independently adapted light sources cross over.
-const smoothFloor=(value:number,floor:number,width=.12)=>mix(value,floor,smootherstep(-width,width,floor-value));
+// Monotonic C2-continuous lower bound. Integrating smootherstep gives a smooth
+// maximum whose derivative stays in [0,1]; a lerp-based "smooth max" can dip
+// below both sources and then rebound around their crossover.
+const smoothFloor=(value:number,floor:number,width=.12)=>{
+  if(value<=floor-width)return floor;
+  if(value>=floor+width)return value;
+  const t=(value-floor+width)/(2*width),integral=2*t**6-6*t**5+5*t**4;
+  return floor+width*integral;
+};
 
 export function daylightPhase(s:AtmosphereState){
   // Twilight definitions use the unrefracted solar-disc center. Apparent
@@ -127,11 +133,12 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   // and becomes dominant before civil twilight. smoothFloor keeps the result
   // C2-continuous and never darkens a naturally brighter solar solution.
   const adaptedMoon=clamp(moonIllumination);
+  const adaptedNightFloor=-2.12+1.02*adaptedMoon+.21*smootherstep(.90,1,adaptedMoon);
   // Match the adapted night plateau across the full useful Story Moon range,
   // then let increasing dawn radiance take over. The previous quadratic floor
   // sat 0.3–0.55 EV below the established night level, so a setting Moon made
   // the frame visibly dim before astronomical dawn brightened it again.
-  const dawnCombinedFloor=-2.08+.98*adaptedMoon+.14*smootherstep(.82,1,adaptedMoon)+.40*smootherstep(-16,-1,elevation);
+  const dawnCombinedFloor=adaptedNightFloor+.40*smootherstep(-16,-1,elevation);
   const dawnExposure=mix(baseExposure,smoothFloor(baseExposure,dawnCombinedFloor,.16),highMoonDawn);
   // In the evening a bright rising Moon is already contributing real modeled
   // sky illumination before the night-adaptation layer reaches full strength.
@@ -139,9 +146,14 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   // create a deep valley followed by an implausible one-stop surge. Base the
   // bridge on current lunar contribution (phase × altitude × extinction), not
   // clock time, and let the native night solution take over when it is brighter.
-  const eveningMoonWindow=smootherstep(6,16,-elevation)*(1-smootherstep(28,38,-elevation));
-  const eveningMoonHandoff=storySky*s.evening*smootherstep(.18,.45,moonIllumination)*eveningMoonWindow;
-  const eveningMoonFloor=-1.95+1.45*moon;
+  // At dusk, residual sky light hands directly to the adapted Story Moon
+  // plateau once the Moon clears the horizon. Using instantaneous lunar lux as
+  // the floor made crescent and half-Moon scenes dim and then relight as the
+  // Moon climbed. The physical altitude still gates availability; the plateau
+  // is the cinematic adaptation target, shared with the pre-dawn bridge.
+  const eveningBridgeWindow=1-smootherstep(.28,.40,s.nightProgress);
+  const eveningMoonHandoff=storySky*s.evening*smootherstep(.06,.24,moonIllumination)*smootherstep(-4,2,moonElevation)*eveningBridgeWindow;
+  const eveningMoonFloor=adaptedNightFloor;
   // Keep physical exposure monotonic through dawn and dusk. Perceived night
   // readability is recovered below through lift/gain and luminance-preserving
   // blue separation rather than a second fading exposure pulse.

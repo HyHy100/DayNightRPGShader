@@ -161,8 +161,8 @@ test("a full Story Moon hands twilight into night without a dark evening valley"
     previous=current;
   }
   const civil=daylightAt(18.9).grade,nautical=daylightAt(19.4).grade,astronomical=daylightAt(19.9).grade;
-  assert.ok(civil.exposure>nautical.exposure+.2);
-  assert.ok(astronomical.exposure>nautical.exposure,"a bright rising Moon should overtake the fading sky during astronomical twilight");
+  assert.ok(civil.exposure>=nautical.exposure-.01,"a full Moon may hold a plateau but nautical twilight must not become brighter than civil twilight");
+  assert.ok(astronomical.exposure>=nautical.exposure-.02,"a bright rising Moon should maintain the adapted plateau through astronomical twilight");
   const midnight=daylightAt(0).grade.exposure,lateTwilight=[];
   for(let minute=Math.ceil(19.4*60);minute<=22*60;minute++)lateTwilight.push(daylightAt(minute/60).grade.exposure);
   assert.ok(Math.min(...lateTwilight)>midnight-.75,"rising Moon must prevent a deep post-twilight exposure valley");
@@ -195,6 +195,17 @@ test("every useful Story Moon phase crosses pre-dawn without an exposure or blue
   const early=daylightAt(4.25).grade,astronomical=daylightAt(4.75).grade;
   assert.ok(astronomical.shadows[2]-astronomical.shadows[0]>.052,"twilight blue must overlap the fading night-blue adaptation");
   assert.ok(early.shadows[2]-early.shadows[0]>astronomical.shadows[2]-astronomical.shadows[0],"dawn blue should relax continuously rather than reverse");
+});
+
+test("every useful Story Moon phase crosses dusk without dimming and relighting",()=>{
+  const base=new Date("2026-08-16T12:00:00-03:00"),config=(illuminatedFraction:number)=>({illuminatedFraction,transitHour:0,maximumElevation:68,waxing:true});
+  for(const illumination of [.25,.5,.73,.8,.95,1]){
+    const midnight=daylightAt(0,base,null,ATMOSPHERE_PRESETS.Standard,config(illumination)).grade;
+    const evening=[];
+    for(let minute=19*60;minute<=22*60;minute++)evening.push(daylightAt(minute/60,base,null,ATMOSPHERE_PRESETS.Standard,config(illumination)).grade);
+    assert.ok(Math.min(...evening.map(g=>g.exposure))>=midnight.exposure-.18,`${illumination*100}% Moon created a post-twilight exposure valley`);
+    for(let i=1;i<evening.length;i++)assert.ok(Math.abs(evening[i].exposure-evening[i-1].exposure)<.035,`${illumination*100}% Moon dusk handoff jumped at minute ${i}`);
+  }
 });
 
 test("true night evolves through afterglow, story moon, and pre-dawn",()=>{
