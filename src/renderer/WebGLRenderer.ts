@@ -111,12 +111,17 @@ export class WebGLRenderer {
 
   async setImage(source: string | Blob) {
     const next = await loadImageTexture(this.gl, source);
+    if (this.destroyed) {
+      this.gl.deleteTexture(next.texture);
+      throw new Error("Renderer was disposed while the image was loading.");
+    }
     if (this.imageTexture) this.gl.deleteTexture(this.imageTexture);
     this.imageTexture = next.texture; this.imageWidth = next.width; this.imageHeight = next.height; this.draw();
     return { width: next.width, height: next.height };
   }
 
   setGrade(g: DaylightGrade) {
+    if (this.destroyed) return;
     this.grade = g; const { gl, gradeShader: s } = this; s.use();
     gl.uniform1f(s.uniform("uExposure"), g.exposure); gl.uniform1f(s.uniform("uTemperature"), g.temperature); gl.uniform1f(s.uniform("uTint"), g.tint);
     gl.uniform1f(s.uniform("uContrast"), g.contrast); gl.uniform1f(s.uniform("uSaturation"), g.saturation); gl.uniform1f(s.uniform("uVibrance"), g.vibrance);

@@ -30,12 +30,11 @@ export class ShaderProgram {
 
   use() { this.gl.useProgram(this.program); }
   uniform(name: string) {
-    let location = this.uniforms.get(name);
-    if (!location) {
-      location = this.gl.getUniformLocation(this.program, name) ?? undefined;
-      if (!location) throw new Error(`Missing uniform ${name}`);
-      this.uniforms.set(name, location);
-    }
+    const cached = this.uniforms.get(name);
+    if (cached !== undefined) return cached;
+    const location = this.gl.getUniformLocation(this.program, name);
+    if (location === null) throw new Error(`Missing uniform ${name}`);
+    this.uniforms.set(name, location);
     return location;
   }
   destroy() { this.gl.deleteProgram(this.program); this.uniforms.clear(); }

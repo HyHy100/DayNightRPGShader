@@ -55,7 +55,7 @@ export default function DaylightStudio(){
   const previewDate=useMemo(()=>parseLocalDate(dateValue),[dateValue]);
   const model=useMemo(()=>daylightAt(hour,previewDate,location,profile,storyMoon),[hour,previewDate,location,profile,storyMoon]);const {grade,atmosphere:a}=model;
 
-  useEffect(()=>{if(!canvasRef.current)return;try{const r=new WebGLRenderer(canvasRef.current);rendererRef.current=r;r.setImage(DEFAULT_IMAGE).then(({width,height})=>{setImageInfo(`leste-refugio.png · ${width} × ${height}`);setStatus("");r.setGrade(daylightAt(hour,previewDate,location,profile,storyMoon).grade);}).catch(e=>setStatus(e instanceof Error?e.message:"Image could not be loaded"));return()=>{exporterRef.current?.cancel();r.destroy();};}catch(e){const message=e instanceof Error?e.message:"WebGL initialization failed";queueMicrotask(()=>setStatus(message));}
+  useEffect(()=>{if(!canvasRef.current)return;let cancelled=false;try{const r=new WebGLRenderer(canvasRef.current);rendererRef.current=r;r.setImage(DEFAULT_IMAGE).then(({width,height})=>{if(cancelled)return;setImageInfo(`leste-refugio.png · ${width} × ${height}`);setStatus("");r.setGrade(daylightAt(hour,previewDate,location,profile,storyMoon).grade);}).catch(e=>{if(!cancelled)setStatus(e instanceof Error?e.message:"Image could not be loaded");});return()=>{cancelled=true;exporterRef.current?.cancel();if(rendererRef.current===r)rendererRef.current=null;r.destroy();};}catch(e){const message=e instanceof Error?e.message:"WebGL initialization failed";queueMicrotask(()=>{if(!cancelled)setStatus(message);});}
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
   useEffect(()=>rendererRef.current?.setGrade(grade),[grade]);
