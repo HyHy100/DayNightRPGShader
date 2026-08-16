@@ -9,6 +9,8 @@ import { calculateSolarPosition } from "../src/daylight/solarPosition";
 import { lumaOffset } from "../src/daylight/perceptualColor";
 import { exportFilename,exportFrameCount,exportFrameProgress,getExportDimensions,sampleDayCycleTimeline } from "../src/export/videoExportModel";
 import { extractWebMVideoFrames,muxWebM } from "../src/export/webmMuxer";
+import { collectDaylightStageSamples } from "../src/export/stageExportModel";
+import { createZip,crc32 } from "../src/export/zipArchive";
 
 test("video export muxes one finite timestamped WebM timeline for Linux players",async()=>{
   const blob=muxWebM({width:1280,height:720,frameRate:30,durationUs:15_000_000,codec:"vp9",chunks:[
@@ -37,6 +39,20 @@ test("video export maps one chronological local day without quantization",()=>{
 test("video export uses stable dimensions and output metadata",()=>{
   assert.deepEqual(getExportDimensions("1080p"),{width:1920,height:1080});assert.deepEqual(getExportDimensions("720p"),{width:1280,height:720});
   assert.equal(exportFilename(new Date(2026,7,16),"comparison"),"daylight-cycle-2026-08-16-comparison.webm");
+});
+
+test("stage export selects one representative image per contiguous phase",()=>{
+  const samples=collectDaylightStageSamples(new Date("2026-08-16T12:00:00-03:00"),null,ATMOSPHERE_PRESETS.Standard,{illuminatedFraction:.95,transitHour:0,maximumElevation:68,waxing:true});
+  assert.ok(samples.length>=12&&samples.length<=20,`unexpected stage count ${samples.length}`);
+  for(const name of ["Pre-dawn Night","Astronomical Twilight","Nautical Twilight","Civil Twilight","Early Sunrise","High Solar Daylight","Golden Sunset","Moonlit Night"])assert.ok(samples.some(sample=>sample.name===name),`${name} missing from stage archive`);
+  assert.equal(new Set(samples.map(sample=>`${sample.time}-${sample.name}`)).size,samples.length);
+});
+
+test("stage ZIP writer emits valid store-only archive metadata",async()=>{
+  const payload=new TextEncoder().encode("daylight");assert.equal(crc32(payload),0x9d57c19a);
+  const blob=await createZip([{name:"manifest.json",data:"{}",date:new Date(2026,7,16)},{name:"stages/01-noon.png",data:payload,date:new Date(2026,7,16)}]),bytes=new Uint8Array(await blob.arrayBuffer()),view=new DataView(bytes.buffer);
+  assert.equal(view.getUint32(0,true),0x04034b50);assert.equal(view.getUint32(bytes.length-22,true),0x06054b50);assert.equal(blob.type,"application/zip");
+  const text=new TextDecoder().decode(bytes);assert.ok(text.includes("manifest.json")&&text.includes("stages/01-noon.png"));
 });
 
 test("video export samples every frame deterministically instead of wall-clock skipping",()=>{
