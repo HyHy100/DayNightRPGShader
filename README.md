@@ -39,6 +39,9 @@ src/renderer/
 src/shaders/
   image.vert                 fitted image-plane vertex shader
   grading.frag               scene-linear grading pipeline
+  brightPass.frag            exposure-relative soft-knee highlight extraction
+  blur.frag                  separable Gaussian optical diffusion
+  composite.frag             bloom, halation, comparison, display encoding
   colorScience.glsl          transfer functions, adaptation, gamut and tone tools
 src/ui/DaylightStudio.tsx    controls, clock, file flow, comparison interaction
 ```
@@ -78,7 +81,11 @@ The fragment pipeline is:
 7. soft-compress out-of-gamut excursions;
 8. map into a compressive domain and sample a genuine 32³ creative film-stock LUT stored as a 256×128 2D atlas with trilinear interpolation across blue slices;
 9. apply a tunable ACES-like filmic curve, highlight desaturation, and final gamut protection;
-10. encode linear light to sRGB and add sub-LSB spatial dithering.
+10. keep the graded result linear in an HDR-capable offscreen target, extract highlights with an exposure-relative soft knee, and build quarter- and eighth-resolution Gaussian diffusion scales;
+11. recombine broad neutral bloom, tighter red-biased film halation, and restrained warm veiling glare using continuously modeled low-sun/noon/night optical controls;
+12. apply a final soft display shoulder, encode linear light to sRGB, and add sub-LSB spatial dithering.
+
+Optical glow is intentionally a lens/film interpretation downstream of atmospheric physics. Low-angle sunlight gradually lowers the extraction threshold and increases warm halation; solar noon stays tighter and cleaner; night raises the threshold and suppresses broad bloom so the renderer never invents a glowing Moon or globally lifts the frame. The UI control scales this model without replacing it.
 
 The LUT is generated once at startup and represents subtle film density, channel crosstalk, a cool toe, and a warm shoulder. Daylight-specific decisions remain structured parameters, so LUT character and environmental grade can evolve independently.
 
@@ -97,8 +104,9 @@ Browsers cannot silently read arbitrary files from `~/Downloads`. During project
 - **Play full day:** 15, 30, or 60-second accelerated continuity preview; crossing midnight advances the preview date so lunar motion remains chronological.
 - **Original / Compare:** graded, original, or draggable split view.
 - **Grade intensity:** perceptual blend from original to full grade.
+- **Optical glow:** scales scene-linear multi-resolution bloom, warm halation, and veiling glare; its temporal character still comes from the continuous daylight state.
 - The comparison divider supports pointer drag and arrow-key adjustment.
 
 ## Performance
 
-The renderer uses WebGL2, cached uniform locations, resident image/LUT textures, one draw call, no CPU per-pixel grading, requestAnimationFrame-coalesced updates, a `ResizeObserver`, and a 2× device-pixel-ratio ceiling to balance retina quality and interactive frame time.
+The renderer uses WebGL2, cached uniform locations, resident image/LUT textures, reusable framebuffer targets, no CPU per-pixel grading, requestAnimationFrame-coalesced updates, a `ResizeObserver`, and a 2× device-pixel-ratio ceiling. The primary scene target uses RGBA16F when float rendering and filtering are supported and falls back cleanly to RGBA8. Bloom runs at quarter and eighth resolution, keeping the added separable blur passes inexpensive while preserving responsive high-DPI interaction.

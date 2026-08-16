@@ -5,7 +5,8 @@ export interface DaylightGrade {
   hour:number; name:string; description:string; exposure:number; temperature:number; tint:number;
   contrast:number; saturation:number; vibrance:number; lift:Vec3; gamma:Vec3; gain:Vec3;
   shadows:Vec3; midtones:Vec3; highlights:Vec3; blackPoint:number; highlightRolloff:number;
-  clarity:number; filmStrength:number;
+  clarity:number; filmStrength:number; bloomStrength:number; bloomThreshold:number;
+  bloomKnee:number; halationStrength:number; glareStrength:number;
 }
 const clamp=(x:number,a=0,b=1)=>Math.max(a,Math.min(b,x));
 
@@ -101,10 +102,22 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   const dayGamma=.010*morningCharacter+.008*noonCrown-.008*afternoonCharacter;
   const gamma:Vec3=[1-.030*s.night+.006*s.haze+moonNightTone*.003+dayGamma,1-.014*s.night+.006*s.haze+moonNightTone*.004+dayGamma,1+.009*s.night+.003*s.twilight+moonNightTone*.004+dayGamma];
   const gain:Vec3=[1-.055*s.night+highlights[0]*.22+moonNightTone*.004+.025*morningCharacter+.034*noonCrown+.035*afternoonCharacter,1-.025*s.night+highlights[1]*.22+moonNightTone*.006+.012*morningCharacter+.032*noonCrown+.015*afternoonCharacter,1+.010*s.night+highlights[2]*.22+moonNightTone*.007-.012*morningCharacter+.028*noonCrown-.020*afternoonCharacter];
+  // Optical response is driven by the same continuous environmental signals,
+  // but remains a downstream lens/film interpretation rather than atmosphere.
+  // Low-angle direct light receives the broadest shoulder and warm halation;
+  // high daylight stays clean, while night requires an actual bright pixel.
+  const opticalDaylight=smootherstep(-8,8,elevation);
+  const bloomStrength=.018+.050*opticalDaylight+.075*lowSun+.025*noonCrown-.028*s.night;
+  const bloomThreshold=.34+.10*noonCrown+.22*s.night-.075*lowSun-.030*storyGolden;
+  const bloomKnee=.16+.075*lowSun+.025*s.haze;
+  const halationStrength=.008+.095*lowSun*(.60+.40*s.sunWarmth)+.030*storyGolden+.012*afternoonCharacter;
+  const glareStrength=.006+.038*lowSun*(.55+.45*s.haze)+.026*storyGolden+.008*noonCrown;
   const [name,description]=daylightPhase(s);
   return {hour,name,description,exposure,temperature,tint,contrast,saturation,vibrance,lift,gamma,gain,shadows,midtones,highlights,
     blackPoint:Math.max(0,.003+.010*s.night+.007*deepNightDensity-.003*s.scotopicAdaptation+.002*s.twilight-(.003+.008*storySky)*moonNightTone-.0015*storyGolden-.001*morningCharacter+.0012*afternoonCharacter),
     highlightRolloff:.28+.25*noon+.20*lowSun+.16*s.twilight+.14*s.night+.045*morningCharacter+.040*afternoonCharacter,
     clarity:.065*noon-.055*s.haze-.025*s.twilight+.012*moonNightTone+.020*noonCrown-.015*morningCharacter-.010*afternoonCharacter,
-    filmStrength:.42+.20*lowSun+.18*s.twilight+.20*s.night+.08*deepNightDensity+.035*morningCharacter+.045*afternoonCharacter};
+    filmStrength:.42+.20*lowSun+.18*s.twilight+.20*s.night+.08*deepNightDensity+.035*morningCharacter+.045*afternoonCharacter,
+    bloomStrength:Math.max(.006,bloomStrength),bloomThreshold:clamp(bloomThreshold,.24,.72),
+    bloomKnee:clamp(bloomKnee,.12,.28),halationStrength:Math.max(0,halationStrength),glareStrength:Math.max(0,glareStrength)};
 }

@@ -9,17 +9,25 @@ import { calculateSolarPosition } from "../src/daylight/solarPosition";
 
 test("the 24-hour physical model closes seamlessly",()=>{
   const a=daylightAt(0),b=daylightAt(24);
-  for(const key of ["exposure","temperature","tint","contrast","saturation","vibrance","blackPoint","highlightRolloff","clarity","filmStrength"] as const) assert.ok(Math.abs(a.grade[key]-b.grade[key])<1e-10,key);
+  for(const key of ["exposure","temperature","tint","contrast","saturation","vibrance","blackPoint","highlightRolloff","clarity","filmStrength","bloomStrength","bloomThreshold","bloomKnee","halationStrength","glareStrength"] as const) assert.ok(Math.abs(a.grade[key]-b.grade[key])<1e-10,key);
 });
 
 test("all grading derivatives remain bounded at minute resolution",()=>{
   let previous=daylightAt(0).grade;
-  const limits={exposure:.04,temperature:.04,contrast:.025,saturation:.025,highlightRolloff:.025};
+  const limits={exposure:.04,temperature:.04,contrast:.025,saturation:.025,highlightRolloff:.025,bloomStrength:.025,bloomThreshold:.025,bloomKnee:.025,halationStrength:.025,glareStrength:.025};
   for(let minute=1;minute<=1440;minute++){
     const current=daylightAt(minute/60).grade;
     for(const key of Object.keys(limits) as (keyof typeof limits)[]) assert.ok(Math.abs(current[key]-previous[key])<limits[key],`${key} discontinuity at minute ${minute}`);
     previous=current;
   }
+});
+
+test("optical response emerges at low sun and remains restrained at night",()=>{
+  const noon=daylightAt(12.25).grade,golden=daylightAt(18.25).grade,night=daylightAt(0).grade;
+  assert.ok(golden.halationStrength>noon.halationStrength+.03);
+  assert.ok(golden.glareStrength>noon.glareStrength+.01);
+  assert.ok(night.bloomThreshold>golden.bloomThreshold+.15);
+  assert.ok(night.bloomStrength<noon.bloomStrength);
 });
 
 test("atmospheric influences are smooth and playback is not minute-quantized",()=>{

@@ -21,9 +21,6 @@ uniform float uBlackPoint;
 uniform float uHighlightRolloff;
 uniform float uClarity;
 uniform float uFilmStrength;
-uniform float uIntensity;
-uniform float uSplit;
-uniform int uComparisonMode;
 
 #include "colorScience.glsl"
 
@@ -43,10 +40,6 @@ vec3 sampleFilmLut(vec3 c) {
   float z0 = floor(z);
   float z1 = min(31.0, z0 + 1.0);
   return mix(sampleLutSlice(c, z0), sampleLutSlice(c, z1), fract(z));
-}
-
-float interleavedGradientNoise(vec2 p) {
-  return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715))));
 }
 
 vec3 grade(vec3 source) {
@@ -91,15 +84,12 @@ vec3 grade(vec3 source) {
   c = filmicCurve(max(c, vec3(0.0)), uHighlightRolloff);
   c = highlightDesaturate(c);
   c = softGamutCompress(c);
-  return clamp(linearToSrgb(c), 0.0, 1.0);
+  // Keep the intermediate in linear display light. Optical bloom is extracted
+  // and recombined before the final sRGB encode in the composite pass.
+  return max(c, vec3(0.0));
 }
 
 void main() {
   vec3 original = texture(uImage, vUv).rgb;
-  vec3 graded = grade(original);
-  vec3 result = mix(original, graded, uIntensity);
-  if (uComparisonMode == 1 && vUv.x < uSplit) result = original;
-  if (uComparisonMode == 2) result = original;
-  float dither = (interleavedGradientNoise(gl_FragCoord.xy) - 0.5) / 255.0;
-  fragColor = vec4(clamp(result + dither * step(0.001, uIntensity), 0.0, 1.0), 1.0);
+  fragColor = vec4(grade(original), 1.0);
 }

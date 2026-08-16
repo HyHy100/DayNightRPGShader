@@ -38,4 +38,5 @@ export class ShaderProgram {
     }
     return location;
   }
+  destroy() { this.gl.deleteProgram(this.program); this.uniforms.clear(); }
 }
