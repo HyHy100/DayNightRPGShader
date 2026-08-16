@@ -43,6 +43,16 @@ test("daylight stages are meaningfully distinct without preset tables",()=>{
   assert.ok(golden.atmosphere.lowSunFactor>.4);
 });
 
+test("horizon lighting survives the irradiance fade and remains asymmetric",()=>{
+  const dawn=daylightAt(6.5),sunrise=daylightAt(6.75),sunset=daylightAt(17.25),horizon=daylightAt(17.5),afterglow=daylightAt(17.75);
+  assert.ok(dawn.atmosphere.lowSunFactor>.2,"dawn color must not vanish with broadband beam energy");
+  assert.ok(horizon.atmosphere.lowSunFactor>.4,"sunset color must survive the horizon irradiance ramp");
+  assert.ok(sunrise.grade.highlights[0]>.015);
+  assert.ok(sunset.grade.highlights[0]>sunrise.grade.highlights[0]+.015,"evening should be richer than morning");
+  assert.ok(afterglow.atmosphere.lowSunFactor>.1,"warm horizon must persist into civil twilight");
+  assert.ok(sunset.grade.temperature>sunrise.grade.temperature+.15);
+});
+
 test("twilight exposure darkens monotonically below daytime",()=>{
   const moonless={illuminatedFraction:.001,transitHour:0,maximumElevation:68,waxing:true},base=new Date("2026-08-16T12:00:00-03:00");
   const nearest=(target:number)=>{let best=daylightAt(0,base,null,ATMOSPHERE_PRESETS.Standard,moonless),error=Infinity;for(let minute=0;minute<1440;minute++){const state=daylightAt(minute/60,base,null,ATMOSPHERE_PRESETS.Standard,moonless),next=Math.abs(state.atmosphere.geometricElevation-target);if(next<error){best=state;error=next;}}return best.grade;};

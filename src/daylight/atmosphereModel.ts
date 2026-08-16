@@ -43,13 +43,23 @@ export function calculateAtmosphereState(solar:SolarPosition,profile:AtmosphereP
   const rayleigh=(1-irradiance.transmissions.rayleigh)*scatteringVisibility;
   const mie=(1-irradiance.transmissions.aerosol)*scatteringVisibility;
   const haze=clamp01(.06+.58*mie+.24*(1-directDiffuseRatio)*above+.18*twilightRadiance);
-  const sunWarmth=clamp01((6500-sunIlluminant.cct)/4300)*smootherstep(0,8,e);
+  const eveningSide=solar.hourAngle>=0;
+  const subHorizonGlow=smootherstep(-6,-.5,e)*(1-smootherstep(0,4,e))*(eveningSide?.70:.35);
+  // Color character survives at much lower beam energy than broadband
+  // irradiance. Keep a restrained, asymmetric horizon glow through civil twilight.
+  const aboveHorizonWarmth=smootherstep(-2,4,e);
+  const warmthVisibility=1-(1-aboveHorizonWarmth)*(1-subHorizonGlow);
+  const sunWarmth=clamp01((6500-sunIlluminant.cct)/4300)*warmthVisibility;
   const skyCoolness=clamp01((skyIlluminant.cct-6500)/10000+.18*twilightRadiance);
   const chromaticDistance=Math.hypot(sunIlluminant.xy[0]-skyIlluminant.xy[0],sunIlluminant.xy[1]-skyIlluminant.xy[1]);
   const spectralSeparation=clamp01((chromaticDistance-.12)/.20);
   // Low-sun art response is now derived from physical air mass and surviving
   // beam energy instead of an hourly or Gaussian "golden hour" pulse.
-  const lowSunFactor=clamp01((irradiance.opticalAirMass-1)/10)*smootherstep(0,6,e)*(1-smootherstep(12,35,e))*smootherstep(0,.12,dniNorm);
+  const lowSunAirMass=clamp01((irradiance.opticalAirMass-1)/8);
+  const lowSunPresence=smootherstep(-1.5,1.5,e)*(1-smootherstep(14,34,e));
+  const lowSunBeam=.58+.42*smootherstep(0,10,e);
+  const lowSunAbove=lowSunAirMass*lowSunPresence*lowSunBeam*smootherstep(0,3,e),lowSunBelow=subHorizonGlow*.55;
+  const lowSunFactor=1-(1-lowSunAbove)*(1-lowSunBelow);
   const twilight=smootherstep(-20,-8,e)*(1-smootherstep(-8,8,e));
   const night=1-smootherstep(-24,-8,e);
   const deepNightDepth=night*smootherstep(18,65,solarDepression);
@@ -66,7 +76,7 @@ export function calculateAtmosphereState(solar:SolarPosition,profile:AtmosphereP
   if(polarState==="normal"&&sunrise!==null&&sunset!==null){
     dayProgress=clock<=solarNoon?.5*(clock-sunrise)/Math.max(.1,solarNoon-sunrise):.5+.5*(clock-solarNoon)/Math.max(.1,sunset-solarNoon);
   }
-  const evening=solar.hourAngle>=0?1:0;
+  const evening=eveningSide?1:0;
   return {...solar,quality:solar.located?"physical-clear-sky":"qualitative-reference",profile,irradiance,sunIlluminant,skyIlluminant,moon,solarDepression,
     airMass:irradiance.opticalAirMass,sunIntensity,skyIrradiance,directDiffuseRatio,sunCCT:sunIlluminant.cct,skyCCT:skyIlluminant.cct,
     sunWarmth,skyCoolness,rayleigh,mie,haze,lowSunFactor,spectralSeparation,twilight,night,deepNightDepth,nightProgress,midnightDepth,
