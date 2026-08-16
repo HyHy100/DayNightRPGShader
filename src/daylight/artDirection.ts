@@ -40,6 +40,16 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   const afternoon=smootherstep(.5,.98,s.dayProgress)*smootherstep(-2,10,elevation);
   const afternoonWarmth=afternoon*Math.pow(1-noon,.65);
   const morningFreshness=(1-s.evening)*smootherstep(0,12,elevation)*(1-smootherstep(28,48,elevation));
+  // Overlapping, C2-continuous daylight phenomena. These are deliberately
+  // broad elevation/progress responses rather than phase presets: they make a
+  // fixed photograph communicate the Sun's changing altitude without faking
+  // moving shadows or scene geometry.
+  const afternoonSide=smootherstep(.46,.64,s.dayProgress);
+  const morningCharacter=(1-afternoonSide)*smootherstep(5,18,elevation)*(1-smootherstep(22,40,elevation));
+  const broadAfternoon=afternoonSide*smootherstep(15,32,elevation)*(1-smootherstep(42,60,elevation));
+  const lowAfternoon=afternoonSide*smootherstep(5,18,elevation)*(1-smootherstep(18,40,elevation));
+  const afternoonCharacter=clamp(.58*broadAfternoon+.74*lowAfternoon);
+  const noonCrown=smootherstep(38,62,elevation);
   const eveningBias=s.evening*(.25+.75*lowSun);
   const deepNightDensity=s.night*(.60*s.deepNightDepth+.40*s.midnightDepth);
   const moon=s.moonlightContribution;
@@ -57,40 +67,44 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   // the derivative peaks produced by stacked twilight "mode" curves.
   const solarDarkening=1-smootherstep(-30,15,elevation);
   const physicalSunColor=mixOklab([1,.985,.95],s.sunIlluminant.linearRgb,clamp(.30+.55*s.sunWarmth));
+  const directionalSunColor=mixOklab(physicalSunColor,[1,.90,.68],.20*morningCharacter+.26*afternoonCharacter);
   // A low solar spectrum can become red-heavy after adaptation. The subtle
   // OKLab blend preserves its luminance while steering Story Sky's direct
   // light through photographic amber (red + yellow energy, not brown/magenta).
-  const sunColor=mixOklab(physicalSunColor,[1,.82,.43],.22*storyGolden);
+  const sunColor=mixOklab(directionalSunColor,[1,.82,.43],.22*storyGolden);
   const skyColor=mixOklab([.93,.97,1],s.skyIlluminant.linearRgb,clamp(.22+.48*s.skyCoolness));
   const moonColor=mixOklab([.94,.97,1],s.moon.spectralIlluminant.linearRgb,.20);
   const sunOffset=rgbOffset(sunColor,.20+.16*lowSun);
   const skyOffset=rgbOffset(skyColor,.14+.18*(s.rayleigh+s.twilight));
   const moonOffset=rgbOffset(moonColor,.12);
-  const warmSeparation=lowSun*(.26+.13*eveningBias)*(.65+.35*s.spectralSeparation)+afternoonWarmth*.10+storyGolden*.16;
-  const coolSeparation=clamp(s.skyCoolness*(.26+.35*(1-noon))+.20*lowSun*(.55+.45*s.spectralSeparation)+.07*morningFreshness+.06*s.eveningAfterglow+.08*s.preDawnAirglow-.05*deepNightDensity);
+  const warmSeparation=lowSun*(.26+.13*eveningBias)*(.65+.35*s.spectralSeparation)+afternoonWarmth*.10+storyGolden*.16+.25*morningCharacter+.35*afternoonCharacter;
+  const coolSeparation=clamp(s.skyCoolness*(.26+.35*(1-noon))+.20*lowSun*(.55+.45*s.spectralSeparation)+.07*morningFreshness+.11*morningCharacter+.13*afternoonCharacter-.100*noonCrown+.06*s.eveningAfterglow+.08*s.preDawnAirglow-.05*deepNightDensity);
   const exposure=-.04+.14*noon-.12*(1-noon)*daylight-.08*s.haze*skyIllumination-.03*afternoon
     -3.0*solarDarkening-.20*deepNightDensity
-    +.05*s.eveningAfterglow+.04*s.preDawnAirglow+.025*s.scotopicAdaptation+(.45+.50*storySky)*moon+.065*storyGolden;
-  const temperature=s.sunWarmth*(.40+.16*eveningBias)-s.skyCoolness*.12*s.twilight-s.night*.25-.07*deepNightDensity-.04*s.preDawnAirglow+afternoonWarmth*.11-morningFreshness*.025-.018*moon+.055*storyGolden;
+    +.05*s.eveningAfterglow+.04*s.preDawnAirglow+.025*s.scotopicAdaptation+(.45+.50*storySky)*moon+.065*storyGolden
+    -.090*morningCharacter+.120*noonCrown-.060*afternoonCharacter;
+  const temperature=s.sunWarmth*(.40+.16*eveningBias)-s.skyCoolness*.12*s.twilight-s.night*.25-.07*deepNightDensity-.04*s.preDawnAirglow+afternoonWarmth*.11-morningFreshness*.025-.018*moon+.090*storyGolden
+    +.180*morningCharacter-.080*noonCrown+.220*afternoonCharacter;
   const tint=clamp(s.sunIlluminant.tint*.08+s.skyIlluminant.tint*.04,-.04,.04)+eveningBias*lowSun*.024;
-  const contrast=.025+.070*noon-.13*s.haze*skyIllumination-.05*s.twilight-.025*s.night-.018*afternoonWarmth;
-  const saturation=.015+.055*(1-noon)*daylight+.025*lowSun+.018*afternoonWarmth-.14*s.twilight-.22*s.night-.07*deepNightDensity+.035*s.eveningAfterglow+.025*s.preDawnAirglow+.018*storyGolden;
-  const vibrance=.025+.050*daylight*(1-s.haze)-.09*s.night+.022*storyGolden;
+  const contrast=.025+.070*noon-.13*s.haze*skyIllumination-.05*s.twilight-.025*s.night-.018*afternoonWarmth-.040*morningCharacter+.050*noonCrown-.040*afternoonCharacter;
+  const saturation=.015+.055*(1-noon)*daylight+.025*lowSun+.018*afternoonWarmth-.14*s.twilight-.22*s.night-.07*deepNightDensity+.035*s.eveningAfterglow+.025*s.preDawnAirglow+.018*storyGolden+.040*morningCharacter-.012*noonCrown+.050*afternoonCharacter;
+  const vibrance=.025+.050*daylight*(1-s.haze)-.09*s.night+.022*storyGolden+.024*morningCharacter+.032*afternoonCharacter;
   const shadows:Vec3=[skyOffset[0]*coolSeparation+moonOffset[0]*moon*.18,skyOffset[1]*coolSeparation+moonOffset[1]*moon*.18,skyOffset[2]*coolSeparation+moonOffset[2]*moon*.18];
   const highlights:Vec3=[sunOffset[0]*warmSeparation,sunOffset[1]*warmSeparation,sunOffset[2]*warmSeparation];
   // The source may contain few specular highlights (common in visual-novel
   // backgrounds). Let golden light reach upper midtones without warming the
   // black floor or collapsing the direct-sun / cool-sky separation.
-  const midtoneSun=.45+.34*storyGolden;
+  const midtoneSun=.45+.34*storyGolden+.25*morningCharacter+.35*afternoonCharacter;
   const midtones:Vec3=[highlights[0]*midtoneSun+shadows[0]*.22,highlights[1]*midtoneSun+shadows[1]*.22,highlights[2]*midtoneSun+shadows[2]*.22];
   const nightLift=-.007*s.night-.003*deepNightDensity+.002*s.scotopicAdaptation+.001*s.twilight+(.003+.006*storySky)*moonNightTone;
   const lift:Vec3=[nightLift-s.night*.003,nightLift,nightLift+s.night*.004+s.twilight*.001+moon*.001];
-  const gamma:Vec3=[1-.030*s.night+.006*s.haze+moonNightTone*.003,1-.014*s.night+.006*s.haze+moonNightTone*.004,1+.009*s.night+.003*s.twilight+moonNightTone*.004];
-  const gain:Vec3=[1-.055*s.night+highlights[0]*.22+moonNightTone*.004,1-.025*s.night+highlights[1]*.22+moonNightTone*.006,1+.010*s.night+highlights[2]*.22+moonNightTone*.007];
+  const dayGamma=.010*morningCharacter+.008*noonCrown-.008*afternoonCharacter;
+  const gamma:Vec3=[1-.030*s.night+.006*s.haze+moonNightTone*.003+dayGamma,1-.014*s.night+.006*s.haze+moonNightTone*.004+dayGamma,1+.009*s.night+.003*s.twilight+moonNightTone*.004+dayGamma];
+  const gain:Vec3=[1-.055*s.night+highlights[0]*.22+moonNightTone*.004+.025*morningCharacter+.034*noonCrown+.035*afternoonCharacter,1-.025*s.night+highlights[1]*.22+moonNightTone*.006+.012*morningCharacter+.032*noonCrown+.015*afternoonCharacter,1+.010*s.night+highlights[2]*.22+moonNightTone*.007-.012*morningCharacter+.028*noonCrown-.020*afternoonCharacter];
   const [name,description]=daylightPhase(s);
   return {hour,name,description,exposure,temperature,tint,contrast,saturation,vibrance,lift,gamma,gain,shadows,midtones,highlights,
-    blackPoint:Math.max(0,.003+.010*s.night+.007*deepNightDensity-.003*s.scotopicAdaptation+.002*s.twilight-(.003+.008*storySky)*moonNightTone-.0015*storyGolden),
-    highlightRolloff:.28+.25*noon+.20*lowSun+.16*s.twilight+.14*s.night,
-    clarity:.065*noon-.055*s.haze-.025*s.twilight+.012*moonNightTone,
-    filmStrength:.42+.20*lowSun+.18*s.twilight+.20*s.night+.08*deepNightDensity};
+    blackPoint:Math.max(0,.003+.010*s.night+.007*deepNightDensity-.003*s.scotopicAdaptation+.002*s.twilight-(.003+.008*storySky)*moonNightTone-.0015*storyGolden-.001*morningCharacter+.0012*afternoonCharacter),
+    highlightRolloff:.28+.25*noon+.20*lowSun+.16*s.twilight+.14*s.night+.045*morningCharacter+.040*afternoonCharacter,
+    clarity:.065*noon-.055*s.haze-.025*s.twilight+.012*moonNightTone+.020*noonCrown-.015*morningCharacter-.010*afternoonCharacter,
+    filmStrength:.42+.20*lowSun+.18*s.twilight+.20*s.night+.08*deepNightDensity+.035*morningCharacter+.045*afternoonCharacter};
 }

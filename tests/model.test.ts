@@ -43,6 +43,18 @@ test("daylight stages are meaningfully distinct without preset tables",()=>{
   assert.ok(golden.atmosphere.lowSunFactor>.4);
 });
 
+test("the full sun-above-horizon arc keeps evolving photographically",()=>{
+  const earlyMorning=daylightAt(7).grade,lateMorning=daylightAt(10).grade,noon=daylightAt(12.25).grade;
+  const earlyAfternoon=daylightAt(14.5).grade,lateAfternoon=daylightAt(17.25).grade;
+  assert.ok(earlyMorning.temperature>lateMorning.temperature+.10,"early morning should retain low-angle warmth");
+  assert.ok(noon.exposure>lateMorning.exposure+.04,"solar noon should have a brighter upper-mid exposure");
+  assert.ok(noon.contrast>lateMorning.contrast+.015,"solar noon should read cleaner and crisper");
+  assert.ok(earlyAfternoon.temperature>noon.temperature+.05,"warmth must start rebuilding before late afternoon");
+  assert.ok(lateAfternoon.temperature>earlyAfternoon.temperature+.18,"late afternoon should clearly approach low-sun warmth");
+  assert.ok(lateAfternoon.saturation>earlyAfternoon.saturation+.04,"late-afternoon midtones should become richer gradually");
+  assert.ok(noon.exposure>earlyAfternoon.exposure+.06,"afternoon density must begin evolving before golden hour");
+});
+
 test("horizon lighting survives the irradiance fade and remains asymmetric",()=>{
   const dawn=daylightAt(6),sunrise=daylightAt(6.25),sunset=daylightAt(18.25),horizon=daylightAt(18.625),afterglow=daylightAt(18.75);
   assert.ok(dawn.atmosphere.lowSunFactor>.2,"dawn color must not vanish with broadband beam energy");
