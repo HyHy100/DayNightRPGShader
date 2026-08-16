@@ -65,7 +65,7 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   const coolSeparation=clamp(s.skyCoolness*(.26+.35*(1-noon))+.20*lowSun*(.55+.45*s.spectralSeparation)+.07*morningFreshness+.06*s.eveningAfterglow+.08*s.preDawnAirglow-.05*deepNightDensity);
   const exposure=-.04+.14*noon-.12*(1-noon)*daylight-.08*s.haze*skyIllumination-.03*afternoon
     -3.0*solarDarkening-.20*deepNightDensity
-    +.05*s.eveningAfterglow+.04*s.preDawnAirglow+.025*s.scotopicAdaptation+(.45+.90*storySky)*Math.sqrt(moon)+.065*storyGolden;
+    +.05*s.eveningAfterglow+.04*s.preDawnAirglow+.025*s.scotopicAdaptation+(.45+.50*storySky)*moon+.065*storyGolden;
   const temperature=s.sunWarmth*(.40+.16*eveningBias)-s.skyCoolness*.12*s.twilight-s.night*.25-.07*deepNightDensity-.04*s.preDawnAirglow+afternoonWarmth*.11-morningFreshness*.025-.018*moon+.055*storyGolden;
   const tint=clamp(s.sunIlluminant.tint*.08+s.skyIlluminant.tint*.04,-.04,.04)+eveningBias*lowSun*.024;
   const contrast=.025+.070*noon-.13*s.haze*skyIllumination-.05*s.twilight-.025*s.night-.018*afternoonWarmth;

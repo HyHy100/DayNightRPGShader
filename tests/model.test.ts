@@ -66,6 +66,18 @@ test("twilight exposure darkens monotonically below daytime",()=>{
   for(const grade of [noon,civil,nautical,astronomical,night])assert.ok(grade.blackPoint>=0,"twilight toe must not lift the black point");
 });
 
+test("a full Story Moon cannot invert the evening twilight brightness hierarchy",()=>{
+  let previous=daylightAt(18.6).grade.exposure;
+  for(let minute=Math.ceil(18.6*60)+1;minute<=Math.floor(20.2*60);minute++){
+    const state=daylightAt(minute/60),current=state.grade.exposure;
+    assert.ok(current<=previous+.002,`twilight exposure brightened at ${minute} minutes: ${previous} -> ${current}`);
+    previous=current;
+  }
+  const civil=daylightAt(18.9).grade,nautical=daylightAt(19.4).grade,astronomical=daylightAt(19.9).grade;
+  assert.ok(civil.exposure>nautical.exposure+.2);
+  assert.ok(nautical.exposure>astronomical.exposure+.2);
+});
+
 test("true night evolves through afterglow, story moon, and pre-dawn",()=>{
   const evening=daylightAt(20.25),late=daylightAt(22),midnight=daylightAt(0),preDawn=daylightAt(4);
   assert.equal(evening.grade.name,"Early Night");
