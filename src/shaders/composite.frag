@@ -54,7 +54,9 @@ void main() {
   gradedLinear /= 1.0 + max(gradedLinear - 0.92, vec3(0.0)) * 0.34;
   vec3 graded = clamp(linearToSrgb(gradedLinear), 0.0, 1.0);
   vec3 result = mix(original, graded, uIntensity);
-  if (uComparisonMode == 1 && imageUv.x < uSplit) result = original;
+  // uSplit is controlled by a handle positioned in canvas coordinates. Using
+  // imageUv here shifts the wipe whenever the contained image is letterboxed.
+  if (uComparisonMode == 1 && vUv.x < uSplit) result = original;
   if (uComparisonMode == 2) result = original;
   float dither = (noise(gl_FragCoord.xy) - 0.5) / 255.0;
   fragColor = vec4(clamp(result + dither * step(0.001, uIntensity), 0.0, 1.0), 1.0);

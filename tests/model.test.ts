@@ -319,6 +319,18 @@ test("Bird-style clear-sky energy closes and remains physical",()=>{
   assert.ok(noon.ghi>650&&noon.ghi<1100);
 });
 
+test("atmosphere profiles have a useful photographic range",()=>{
+  const base=new Date("2026-08-16T12:00:00-03:00");
+  for(const hour of [8,12.25,18]){
+    const clean=daylightAt(hour,base,null,ATMOSPHERE_PRESETS.Clean).grade;
+    const hazy=daylightAt(hour,base,null,ATMOSPHERE_PRESETS.Hazy).grade;
+    assert.ok(clean.contrast>hazy.contrast+.07,`${hour}: Clean must be visibly crisper than Hazy`);
+    assert.ok(clean.clarity>hazy.clarity+.06,`${hour}: profile clarity range is too weak`);
+    assert.ok(clean.saturation>hazy.saturation+.035,`${hour}: haze must restrain chroma`);
+    assert.ok(hazy.highlightRolloff>clean.highlightRolloff+.04,`${hour}: haze must soften highlights`);
+  }
+});
+
 test("spectral illuminants warm at low sun and remain finite",()=>{
   const low=daylightAt(7),high=daylightAt(12);
   assert.ok(low.atmosphere.sunCCT<high.atmosphere.sunCCT);
