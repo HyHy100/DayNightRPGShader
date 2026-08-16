@@ -136,6 +136,10 @@ export class WebGLRenderer {
   setOpticalGlow(value: number) { this.opticalGlow = Math.max(0, Math.min(1.5, value)); this.draw(); }
   setSplit(value: number) { this.split = Math.max(0, Math.min(1, value)); this.draw(); }
   setComparison(mode: ComparisonMode) { this.comparison = mode; this.draw(); }
+  setOutputSize(width: number, height: number) {
+    this.pendingWidth = Math.max(1, Math.round(width)); this.pendingHeight = Math.max(1, Math.round(height));
+    this.canvas.width = this.pendingWidth; this.canvas.height = this.pendingHeight; this.draw();
+  }
   renderFrame() { if (this.frame) cancelAnimationFrame(this.frame); this.frame = 0; this.render(); }
 
   private resize() {

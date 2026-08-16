@@ -124,6 +124,8 @@ Browsers cannot silently read arbitrary files from `~/Downloads`. During project
 - **Play full day:** 15, 30, or 60-second accelerated continuity preview; crossing midnight advances the preview date so lunar motion remains chronological.
 - **Original / Compare:** graded, original, or draggable split view.
 - **Export video:** records a silent midnight-to-midnight WebM entirely in the browser at 720p or 1080p and 30 FPS. Choose a graded render or a labeled 50/50 original/graded comparison; 15, 30, and 60-second durations are available. The recording includes a restrained top-centered timecode without atmospheric stage-name overlays.
+- **Export current PNG:** renders the current grade, intensity, and optical glow through an isolated WebGL canvas at the source image's exact pixel dimensions. Comparison UI and interface overlays are never baked into the image.
+- **Export all stages:** finds every contiguous atmospheric phase for the selected date and celestial configuration, renders a representative full-resolution PNG at each phase midpoint, and downloads them in a ZIP with a JSON manifest.
 - **Grade intensity:** perceptual blend from original to full grade.
 - **Optical glow:** scales scene-linear multi-resolution bloom, warm halation, and veiling glare; its temporal character still comes from the continuous daylight state.
 - The comparison divider supports pointer drag and arrow-key adjustment.
