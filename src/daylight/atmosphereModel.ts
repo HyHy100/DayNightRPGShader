@@ -1,64 +1,70 @@
+import { calculateClearSkyIrradiance,STANDARD_ATMOSPHERE,type AtmosphereProfile,type ClearSkyIrradiance } from "./clearSkyModel";
+import { calculateSpectralIlluminants,type SpectralIlluminant } from "./spectralModel";
 import type { SolarPosition } from "./solarPosition";
 
 const clamp01=(x:number)=>Math.max(0,Math.min(1,x));
 export const smootherstep=(a:number,b:number,x:number)=>{const t=clamp01((x-a)/(b-a));return t*t*t*(t*(t*6-15)+10);};
-const gaussian=(x:number,c:number,w:number)=>Math.exp(-.5*((x-c)/w)**2);
 
-export interface AtmosphereState extends SolarPosition {
+export interface PhysicalDaylightState extends SolarPosition {
+  quality:"physical-clear-sky"|"qualitative-reference";
+  profile:AtmosphereProfile;
+  irradiance:ClearSkyIrradiance;
+  sunIlluminant:SpectralIlluminant;
+  skyIlluminant:SpectralIlluminant;
   solarDepression:number; airMass:number; sunIntensity:number; skyIrradiance:number; directDiffuseRatio:number;
   sunCCT:number; skyCCT:number; sunWarmth:number; skyCoolness:number; rayleigh:number;
-  mie:number; haze:number; goldenHour:number; blueHour:number; twilight:number; night:number;
+  mie:number; haze:number; lowSunFactor:number; spectralSeparation:number; twilight:number; night:number;
   deepNightDepth:number; nightProgress:number; midnightDepth:number; eveningAfterglow:number;
   preDawnAirglow:number; scotopicAdaptation:number; dayProgress:number; evening:number;
 }
+export type AtmosphereState=PhysicalDaylightState;
 
 export function calculateAirMass(elevation:number){
-  if(elevation<=-1) return 40;
-  const e=Math.max(-.99,elevation);
-  return Math.min(40,1/(Math.sin(e*Math.PI/180)+.50572*((e+6.07995)**-1.6364)));
+  if(elevation<=0)return 0;
+  const z=90-elevation;
+  return 1/(Math.cos(z*Math.PI/180)+.50572*Math.pow(96.07995-z,-1.6364));
 }
 
-export function calculateAtmosphereState(solar:SolarPosition):AtmosphereState{
-  const e=solar.elevation;
-  const airMass=calculateAirMass(e);
-  const above=smootherstep(-10,15,e);
-  const altitude=clamp01(Math.sin(Math.max(0,e)*Math.PI/180));
-  // Soften the geometric irradiance onset. A sub-unit power of sin(elevation)
-  // has an infinite slope at the horizon and caused a visible flash.
-  const geometricIntensity=smootherstep(0,.30,altitude)*(.45+.55*Math.sqrt(altitude));
-  const sunIntensity=above*geometricIntensity*Math.exp(-.025*Math.max(0,airMass-1));
-  const skyIrradiance=smootherstep(-24,18,e)*(.22+.78*smootherstep(0,.55,altitude));
-  const horizon=gaussian(e,1.5,15);
-  const mie=clamp01(horizon*(.45+.55*clamp01((airMass-1)/12)));
-  const rayleigh=clamp01(.28+.62*Math.pow(1-altitude,.65))*smootherstep(-24,-4,e);
-  // Broad elevation bands overlap deliberately. The former Gaussian peaks
-  // read as temporal pulses when the sun moved quickly near the horizon.
-  const twilight=smootherstep(-24,-10,e)*(1-smootherstep(-8,6,e));
-  const blueHour=smootherstep(-22,-8,e)*(1-smootherstep(-7,12,e));
-  const goldenHour=smootherstep(-14,4,e)*(1-smootherstep(6,30,e));
+export function calculateAtmosphereState(solar:SolarPosition,profile:AtmosphereProfile=STANDARD_ATMOSPHERE):AtmosphereState{
+  const e=solar.geometricElevation;
+  const irradiance=calculateClearSkyIrradiance(e,solar.earthSunDistanceAU,profile);
+  const {sun:sunIlluminant,sky:skyIlluminant}=calculateSpectralIlluminants(e,irradiance,profile);
+  const solarDepression=Math.max(0,-e),above=smootherstep(-1,3,e);
+  const dniNorm=clamp01(irradiance.dni/1000),dhiNorm=clamp01(irradiance.dhi/260),ghiNorm=clamp01(irradiance.ghi/1050);
+  const twilightRadiance=Math.exp(-.27*solarDepression)*smootherstep(-18,-12,e)*(1-smootherstep(2,8,e));
+  const sunIntensity=solar.located?dniNorm:clamp01(dniNorm*.88+smootherstep(0,22,e)*.12);
+  const skyIrradiance=solar.located?clamp01(dhiNorm*.78+ghiNorm*.22+twilightRadiance*.1):clamp01(dhiNorm*.55+ghiNorm*.35+twilightRadiance*.1);
+  const directHorizontal=irradiance.dni*Math.max(0,Math.sin(e*Math.PI/180));
+  const directDiffuseRatio=irradiance.ghi>0?clamp01(directHorizontal/irradiance.ghi):0;
+  const scatteringVisibility=smootherstep(-2,8,e);
+  const rayleigh=(1-irradiance.transmissions.rayleigh)*scatteringVisibility;
+  const mie=(1-irradiance.transmissions.aerosol)*scatteringVisibility;
+  const haze=clamp01(.06+.58*mie+.24*(1-directDiffuseRatio)*above+.18*twilightRadiance);
+  const sunWarmth=clamp01((6500-sunIlluminant.cct)/4300)*smootherstep(0,8,e);
+  const skyCoolness=clamp01((skyIlluminant.cct-6500)/10000+.18*twilightRadiance);
+  const chromaticDistance=Math.hypot(sunIlluminant.xy[0]-skyIlluminant.xy[0],sunIlluminant.xy[1]-skyIlluminant.xy[1]);
+  const spectralSeparation=clamp01((chromaticDistance-.12)/.20);
+  // Low-sun art response is now derived from physical air mass and surviving
+  // beam energy instead of an hourly or Gaussian "golden hour" pulse.
+  const lowSunFactor=clamp01((irradiance.opticalAirMass-1)/10)*smootherstep(0,6,e)*(1-smootherstep(12,35,e))*smootherstep(0,.12,dniNorm);
+  const twilight=smootherstep(-20,-8,e)*(1-smootherstep(-8,8,e));
   const night=1-smootherstep(-24,-8,e);
-  const deepNightDepth=night*smootherstep(18,65,Math.max(0,-e));
-  // Follow the sun around the dark hemisphere: approximately 0 at evening
-  // horizon, .5 at anti-solar midnight and 1 at the morning horizon. This
-  // remains useful even when solar depression has saturated at deep night.
-  const darkHemisphereAngle=solar.hourAngle>=0 ? solar.hourAngle-90 : solar.hourAngle+270;
+  const deepNightDepth=night*smootherstep(18,65,solarDepression);
+  const darkHemisphereAngle=solar.hourAngle>=0?solar.hourAngle-90:solar.hourAngle+270;
   const nightProgress=clamp01(darkHemisphereAngle/180);
-  // A Gaussian keeps both the value and its rate of change smooth through
-  // midnight. A triangular response produced a subtle derivative cusp there.
   const midnightDistance=(nightProgress-.5)/.24;
   const midnightDepth=night*Math.exp(-.5*midnightDistance*midnightDistance);
-  const eveningAfterglow=(solar.hourAngle>=0?1:0)*night*(1-smootherstep(18,42,Math.max(0,-e)));
-  const preDawnAirglow=(solar.hourAngle<0?1:0)*night*(1-smootherstep(18,42,Math.max(0,-e)));
+  const eveningAfterglow=(solar.hourAngle>=0?1:0)*night*(1-smootherstep(18,42,solarDepression));
+  const preDawnAirglow=(solar.hourAngle<0?1:0)*night*(1-smootherstep(18,42,solarDepression));
   const scotopicAdaptation=night*smootherstep(.08,.55,nightProgress);
-  const sunWarmth=(1-Math.exp(-Math.max(0,airMass-1)/6))*above;
-  const skyCoolness=clamp01(.25+.55*rayleigh+.35*blueHour-.18*sunIntensity);
-  const directDiffuseRatio=clamp01(sunIntensity*(1-.55*mie));
-  const haze=clamp01(.10+.62*mie+.28*twilight);
-  const sunCCT=1850+4400*(1-Math.exp(-Math.max(0,e+.5)/13));
-  const skyCCT=7200+3800*rayleigh+2200*blueHour;
-  const {sunrise,sunset,solarNoon}=solar.events;
-  const clock=solar.solarTime;
+  const {sunrise,sunset,solarNoon,polarState}=solar.events,clock=solar.solarTime;
+  let dayProgress=.5+.5*Math.sin(solar.hourAngle*Math.PI/180);
+  if(polarState==="normal"&&sunrise!==null&&sunset!==null){
+    dayProgress=clock<=solarNoon?.5*(clock-sunrise)/Math.max(.1,solarNoon-sunrise):.5+.5*(clock-solarNoon)/Math.max(.1,sunset-solarNoon);
+  }
   const evening=solar.hourAngle>=0?1:0;
-  const dayProgress=clock<=solarNoon ? .5*(clock-sunrise)/Math.max(.1,solarNoon-sunrise) : .5+.5*(clock-solarNoon)/Math.max(.1,sunset-solarNoon);
-  return {...solar,solarDepression:Math.max(0,-e),airMass,sunIntensity,skyIrradiance,directDiffuseRatio,sunCCT,skyCCT,sunWarmth,skyCoolness,rayleigh,mie,haze,goldenHour,blueHour,twilight,night,deepNightDepth,nightProgress,midnightDepth,eveningAfterglow,preDawnAirglow,scotopicAdaptation,dayProgress:clamp01(dayProgress),evening};
+  return {...solar,quality:solar.located?"physical-clear-sky":"qualitative-reference",profile,irradiance,sunIlluminant,skyIlluminant,solarDepression,
+    airMass:irradiance.opticalAirMass,sunIntensity,skyIrradiance,directDiffuseRatio,sunCCT:sunIlluminant.cct,skyCCT:skyIlluminant.cct,
+    sunWarmth,skyCoolness,rayleigh,mie,haze,lowSunFactor,spectralSeparation,twilight,night,deepNightDepth,nightProgress,midnightDepth,
+    eveningAfterglow,preDawnAirglow,scotopicAdaptation,dayProgress:clamp01(dayProgress),evening};
 }

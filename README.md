@@ -24,7 +24,9 @@ npm start
 app/                         Vinext/React route and application styling
 src/daylight/
   solarPosition.ts           NOAA solar position, azimuth, equation of time, events
-  atmosphereModel.ts         air mass, irradiance, scattering and twilight signals
+  clearSkyModel.ts           Bird-style DNI/DHI/GHI and atmosphere profiles
+  spectralModel.ts           sampled solar/sky spectra, CIE XYZ, chromaticity and CCT
+  atmosphereModel.ts         physical state orchestration and nocturnal art signals
   perceptualColor.ts         OKLab conversion and perceptual illuminant mixing
   artDirection.ts            physical-state to cinematic-grade interpretation
   daylightModel.ts           orchestration and clock-only reference fallback
@@ -43,13 +45,17 @@ Rendering, astronomical geometry, atmospheric physics, cinematic interpretation,
 
 ## Daylight model
 
-There are no hourly grading presets. With permission, the model calculates NOAA-derived equation of time, declination, hour angle, apparent solar elevation, azimuth, solar noon, sunrise/sunset, and civil/nautical/astronomical twilight for the current date and latitude/longitude. Kasten–Young air mass then drives continuous approximations of irradiance, direct/diffuse balance, Rayleigh-like sky contribution, Mie-like horizon haze, sun and sky CCT, golden-hour response, blue-hour response, and twilight depth.
+There are no hourly grading presets. With permission, the model calculates SPA-oriented/NOAA-derived Julian solar geometry: Earth–sun distance, equation of time, declination, hour angle, geometric and refracted elevation, azimuth, solar noon, sunrise/sunset, polar-day/night state, and civil/nautical/astronomical twilight for the current date and latitude/longitude.
+
+A Bird-style broadband clear-sky model produces direct normal (DNI), diffuse horizontal (DHI), and global horizontal irradiance (GHI) in W/m², with explicit Rayleigh, ozone, mixed-gas, water-vapor, and aerosol transmission. Energy closes as `GHI = DNI × cos(zenith) + DHI`. Clean, Standard, Hazy, and Custom offline atmosphere profiles expose pressure, altitude, precipitable water, ozone, aerosol optical depth, Ångström exponent, and albedo assumptions.
+
+A compact 380–780 nm spectral model integrates a solar spectrum and wavelength-dependent atmospheric extinction through analytic CIE 1931 color-matching functions. It yields separate direct-sun and diffuse-sky XYZ/xy chromaticities, CCT, tint, and linear-RGB adaptation colors. This is a compact photographic illuminant model, not a replacement for line-by-line radiative-transfer software such as SMARTS.
 
 Those physical signals feed a separate art-direction model. Direct sunlight influences highlights and upper midtones; diffuse sky influences shadows and lower midtones. Illuminant colors mix in OKLab, while exposure and chromatic adaptation remain physically appropriate linear/LMS operations. Morning/evening asymmetry is introduced through normalized sunrise→solar-noon→sunset progress without overriding elevation.
 
 Below −18° the classification is physically **true night**, but the grade does not freeze. Solar hour angle continues around the dark hemisphere and drives a smooth evening-afterglow → anti-solar-midnight → pre-dawn-airglow trajectory. Solar-depression depth, a Gaussian midnight response, and restrained scotopic-adaptation shaping vary exposure, density, chroma, black point, and film response continuously. This intentionally avoids inventing moonlight: lunar position, phase, and cloud cover are not available inputs.
 
-Every influence uses broad, overlapping C2-continuous elevation bands. Narrow bell-shaped golden/blue pulses are deliberately avoided because they read as filter events when the sun moves quickly near the horizon. Regression tests bound minute-to-minute derivatives for both the atmospheric signals and final grade, verify sub-second playback resolution, and verify the 24:00→00:00 closure. When location is unavailable, a continuous clock-driven reference solar arc supplies the same atmospheric pipeline rather than reverting to preset interpolation.
+Golden and blue-hour behavior now emerges from air mass, surviving beam energy, diffuse-sky contribution, spectral sun/sky separation, and solar depression rather than dedicated time pulses. Regression tests bound minute-to-minute derivatives for both the atmospheric signals and final grade, verify sub-second playback resolution, verify irradiance energy closure, and verify the 24:00→00:00 closure. When location is unavailable, the UI explicitly labels the clock-driven arc as a normalized qualitative reference and never presents it in physical units.
 
 ## GPU color pipeline
 
@@ -78,7 +84,8 @@ Browsers cannot silently read arbitrary files from `~/Downloads`. During project
 
 - **Auto time / Manual:** live local time or arbitrary minute-precision preview.
 - **Solar geometry:** optional date/location-aware astronomical calculations, entirely on-device.
-- **Physics:** the full-day plot shows primary physical quantities—solar elevation, direct irradiance, diffuse-sky irradiance, and deep-night depth—while the live inspector exposes CCT, scattering, haze, golden/blue-hour interpretation, twilight, dark-hemisphere progress, afterglow, pre-dawn airglow, and visual adaptation.
+- **Physics:** located mode shows separate solar-elevation and clear-sky DNI/DHI/GHI plots with degree and W/m² units. Reference mode is explicitly normalized and nonphysical. The live inspector exposes irradiance, optical air mass, CCT, chromaticity, atmospheric losses, spectral separation, twilight, and nocturnal art signals.
+- **Atmosphere profile:** choose Clean, Standard, Hazy, or edit all clear-sky assumptions manually. No network or weather service is used.
 - **Play full day:** 15, 30, or 60-second accelerated continuity preview.
 - **Original / Compare:** graded, original, or draggable split view.
 - **Grade intensity:** perceptual blend from original to full grade.

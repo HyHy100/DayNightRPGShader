@@ -29,23 +29,23 @@ export function daylightPhase(s:AtmosphereState){
 /** Maps continuous atmospheric physics into restrained photographic controls. */
 export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGrade{
   const daylight=1-s.night;
-  const lowSun=s.goldenHour;
-  const skyIllumination=smootherstep(-20,4,s.elevation);
+  const lowSun=s.lowSunFactor;
+  const skyIllumination=clamp(s.skyIrradiance+s.twilight*.18);
   const noon=Math.pow(clamp(Math.sin(Math.max(0,s.elevation)*Math.PI/180)),.7);
   const afternoon=smootherstep(.5,.98,s.dayProgress)*smootherstep(-2,10,s.elevation);
   const afternoonWarmth=afternoon*Math.pow(1-noon,.65);
   const morningFreshness=(1-s.evening)*smootherstep(0,12,s.elevation)*(1-smootherstep(28,48,s.elevation));
   const eveningBias=s.evening*(.25+.75*lowSun);
   const deepNightDensity=s.night*(.60*s.deepNightDepth+.40*s.midnightDepth);
-  const sunColor=mixOklab([1,.985,.95],[1,.48,.16],clamp(s.sunWarmth*(.72+.18*eveningBias)));
-  const skyColor=mixOklab([.93,.97,1],[.36,.62,1],clamp(s.skyCoolness*.72));
+  const sunColor=mixOklab([1,.985,.95],s.sunIlluminant.linearRgb,clamp(.30+.55*s.sunWarmth));
+  const skyColor=mixOklab([.93,.97,1],s.skyIlluminant.linearRgb,clamp(.22+.48*s.skyCoolness));
   const sunOffset=rgbOffset(sunColor,.20+.16*lowSun);
-  const skyOffset=rgbOffset(skyColor,.16+.20*(s.rayleigh+s.blueHour));
-  const warmSeparation=lowSun*(.32+.14*eveningBias)+afternoonWarmth*.10;
-  const coolSeparation=clamp(s.skyCoolness*(.26+.35*(1-noon))+.13*lowSun+.07*morningFreshness+.06*s.eveningAfterglow+.08*s.preDawnAirglow-.05*deepNightDensity);
-  const exposure=-1.42+1.46*skyIllumination+.13*noon-.14*s.haze*skyIllumination-.04*afternoon-.18*deepNightDensity+.14*s.eveningAfterglow+.11*s.preDawnAirglow+.06*s.scotopicAdaptation;
-  const temperature=s.sunWarmth*(.44+.18*eveningBias)-s.blueHour*.20-s.night*.25-.07*deepNightDensity-.04*s.preDawnAirglow+afternoonWarmth*.11-morningFreshness*.025;
-  const tint=eveningBias*lowSun*.030-s.blueHour*.008;
+  const skyOffset=rgbOffset(skyColor,.14+.18*(s.rayleigh+s.twilight));
+  const warmSeparation=lowSun*(.26+.13*eveningBias)*(.65+.35*s.spectralSeparation)+afternoonWarmth*.10;
+  const coolSeparation=clamp(s.skyCoolness*(.26+.35*(1-noon))+.20*lowSun*(.55+.45*s.spectralSeparation)+.07*morningFreshness+.06*s.eveningAfterglow+.08*s.preDawnAirglow-.05*deepNightDensity);
+  const exposure=-1.42+1.38*skyIllumination+.18*s.sunIntensity+.08*noon-.13*s.haze*skyIllumination-.04*afternoon-.18*deepNightDensity+.14*s.eveningAfterglow+.11*s.preDawnAirglow+.06*s.scotopicAdaptation;
+  const temperature=s.sunWarmth*(.40+.16*eveningBias)-s.skyCoolness*.12*s.twilight-s.night*.25-.07*deepNightDensity-.04*s.preDawnAirglow+afternoonWarmth*.11-morningFreshness*.025;
+  const tint=clamp(s.sunIlluminant.tint*.08+s.skyIlluminant.tint*.04,-.04,.04)+eveningBias*lowSun*.024;
   const contrast=.025+.070*noon-.13*s.haze*skyIllumination-.05*s.twilight-.025*s.night-.018*afternoonWarmth;
   const saturation=.015+.055*(1-noon)*daylight+.025*lowSun+.018*afternoonWarmth-.14*s.twilight-.22*s.night-.07*deepNightDensity+.035*s.eveningAfterglow+.025*s.preDawnAirglow;
   const vibrance=.025+.050*daylight*(1-s.haze)-.09*s.night;
@@ -53,8 +53,8 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   const highlights:Vec3=[sunOffset[0]*warmSeparation,sunOffset[1]*warmSeparation,sunOffset[2]*warmSeparation];
   const midtones:Vec3=[highlights[0]*.45+shadows[0]*.22,highlights[1]*.45+shadows[1]*.22,highlights[2]*.45+shadows[2]*.22];
   const nightLift=-.006*s.night-.003*deepNightDensity+.003*s.scotopicAdaptation+.004*s.twilight;
-  const lift:Vec3=[nightLift-s.night*.003,nightLift,nightLift+s.night*.005+s.blueHour*.004];
-  const gamma:Vec3=[1-.028*s.night+.008*s.haze,1-.012*s.night+.008*s.haze,1+.012*s.night+.010*s.blueHour];
+  const lift:Vec3=[nightLift-s.night*.003,nightLift,nightLift+s.night*.005+s.twilight*.003];
+  const gamma:Vec3=[1-.028*s.night+.008*s.haze,1-.012*s.night+.008*s.haze,1+.012*s.night+.008*s.twilight];
   const gain:Vec3=[1-.055*s.night+highlights[0]*.22,1-.025*s.night+highlights[1]*.22,1+.010*s.night+highlights[2]*.22];
   const [name,description]=daylightPhase(s);
   return {hour,name,description,exposure,temperature,tint,contrast,saturation,vibrance,lift,gamma,gain,shadows,midtones,highlights,

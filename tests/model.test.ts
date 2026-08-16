@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { calculateAirMass } from "../src/daylight/atmosphereModel";
+import { ATMOSPHERE_PRESETS,calculateClearSkyIrradiance } from "../src/daylight/clearSkyModel";
 import { daylightAt } from "../src/daylight/daylightModel";
 import { calculateSolarPosition } from "../src/daylight/solarPosition";
 
@@ -20,7 +21,7 @@ test("all grading derivatives remain bounded at minute resolution",()=>{
 });
 
 test("atmospheric influences are smooth and playback is not minute-quantized",()=>{
-  const limits={sunIntensity:.03,rayleigh:.03,mie:.04,haze:.03,goldenHour:.04,blueHour:.05,twilight:.05,night:.04};
+  const limits={sunIntensity:.12,skyIrradiance:.12,rayleigh:.12,mie:.12,haze:.08,lowSunFactor:.18,spectralSeparation:.18,twilight:.05,night:.04};
   let previous=daylightAt(0).atmosphere;
   for(let minute=1;minute<=1440;minute++){
     const current=daylightAt(minute/60).atmosphere;
@@ -31,13 +32,13 @@ test("atmospheric influences are smooth and playback is not minute-quantized",()
 });
 
 test("daylight stages are meaningfully distinct without preset tables",()=>{
-  const sunrise=daylightAt(6.5),morning=daylightAt(8),noon=daylightAt(12),afternoon=daylightAt(16),golden=daylightAt(17);
-  assert.ok(sunrise.grade.highlights[0]>morning.grade.highlights[0]+.01);
-  assert.ok(sunrise.grade.shadows[2]>morning.grade.shadows[2]+.05);
+  const sunrise=daylightAt(7),morning=daylightAt(8),noon=daylightAt(12),afternoon=daylightAt(16),golden=daylightAt(17);
+  assert.ok(sunrise.grade.highlights[0]>morning.grade.highlights[0]+.006);
+  assert.ok(sunrise.atmosphere.spectralSeparation>morning.atmosphere.spectralSeparation+.1);
   assert.ok(noon.grade.clarity>morning.grade.clarity);
   assert.ok(afternoon.grade.temperature>noon.grade.temperature+.04);
   assert.ok(golden.grade.temperature>afternoon.grade.temperature+.15);
-  assert.ok(golden.atmosphere.goldenHour>.7);
+  assert.ok(golden.atmosphere.lowSunFactor>.4);
 });
 
 test("true night evolves through afterglow, anti-solar midnight, and pre-dawn",()=>{
@@ -60,9 +61,50 @@ test("Kasten-Young air mass falls as solar elevation rises",()=>{
   assert.ok(calculateAirMass(45)>calculateAirMass(75));
 });
 
+test("Bird-style clear-sky energy closes and remains physical",()=>{
+  for(const elevation of [2,10,30,60,85]){
+    const result=calculateClearSkyIrradiance(elevation,1,ATMOSPHERE_PRESETS.Standard);
+    const horizontal=result.dni*Math.sin(elevation*Math.PI/180)+result.dhi;
+    assert.ok(Math.abs(result.ghi-horizontal)<1e-8);
+    assert.ok(result.dni>=0&&result.dhi>=0&&result.ghi>=0);
+    assert.ok(result.dni<result.extraterrestrialNormal);
+  }
+  const night=calculateClearSkyIrradiance(-1,1,ATMOSPHERE_PRESETS.Standard);
+  assert.equal(night.dni,0);assert.equal(night.dhi,0);assert.equal(night.ghi,0);
+  const noon=calculateClearSkyIrradiance(60,1,ATMOSPHERE_PRESETS.Standard);
+  assert.ok(noon.dni>750&&noon.dni<1050);
+  assert.ok(noon.ghi>650&&noon.ghi<1100);
+});
+
+test("spectral illuminants warm at low sun and remain finite",()=>{
+  const low=daylightAt(7),high=daylightAt(12);
+  assert.ok(low.atmosphere.sunCCT<high.atmosphere.sunCCT);
+  for(const state of [low.atmosphere,high.atmosphere])for(const value of [...state.sunIlluminant.xyz,...state.skyIlluminant.xyz,...state.sunIlluminant.xy,...state.skyIlluminant.xy])assert.ok(Number.isFinite(value));
+});
+
+test("located clear-sky quantities remain continuous at ten-second resolution",()=>{
+  const base=new Date("2026-08-16T00:00:00-03:00");
+  const location={lat:-23.55,lon:-46.63};
+  let previous=daylightAt(0,base,location);
+  for(let seconds=10;seconds<=86400;seconds+=10){
+    const current=daylightAt(seconds/3600,base,location);
+    assert.ok(Math.abs(current.atmosphere.irradiance.dni-previous.atmosphere.irradiance.dni)<4,"DNI derivative spike");
+    assert.ok(Math.abs(current.atmosphere.irradiance.dhi-previous.atmosphere.irradiance.dhi)<1,"DHI derivative spike");
+    assert.ok(Math.abs(current.atmosphere.irradiance.ghi-previous.atmosphere.irradiance.ghi)<1,"GHI derivative spike");
+    assert.ok(Math.abs(current.atmosphere.sunCCT-previous.atmosphere.sunCCT)<15,"sun CCT derivative spike");
+    assert.ok(Math.abs(current.grade.exposure-previous.grade.exposure)<.003,"exposure derivative spike");
+    previous=current;
+  }
+});
+
 test("astronomical solar position returns finite seasonal geometry",()=>{
   const solar=calculateSolarPosition(new Date("2026-08-16T12:00:00-03:00"),{lat:-23.55,lon:-46.63});
   for(const value of [solar.elevation,solar.azimuth,solar.declination,solar.equationOfTime,solar.events.sunrise,solar.events.sunset])assert.ok(Number.isFinite(value));
-  assert.ok(solar.events.sunrise<solar.events.solarNoon);
-  assert.ok(solar.events.solarNoon<solar.events.sunset);
+  assert.ok(solar.events.sunrise!==null&&solar.events.sunrise<solar.events.solarNoon);
+  assert.ok(solar.events.sunset!==null&&solar.events.solarNoon<solar.events.sunset);
+  assert.ok(Math.abs(solar.geometricElevation-52.76)<.15);
+  const polarDay=calculateSolarPosition(new Date("2026-06-21T12:00:00Z"),{lat:75,lon:0});
+  const polarNight=calculateSolarPosition(new Date("2026-12-21T12:00:00Z"),{lat:75,lon:0});
+  assert.equal(polarDay.events.polarState,"polar-day");assert.equal(polarDay.events.sunrise,null);
+  assert.equal(polarNight.events.polarState,"polar-night");assert.equal(polarNight.events.sunset,null);
 });

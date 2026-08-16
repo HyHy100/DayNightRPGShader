@@ -70,13 +70,22 @@ input[type="range"]::-webkit-slider-thumb { appearance: none; width: 14px; heigh
 .stat-label { color: #626566; font-size: 8px; letter-spacing: .12em; text-transform: uppercase; }
 .stat-value { margin-top: 4px; color: #c9c8c4; font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .physics-panel { background: #0d0f11; }
-.day-curve { width: 100%; height: 84px; display: block; margin: 4px 0 7px; border: 1px solid #ffffff0b; border-radius: 6px; background: #090a0b; }
+.day-curve { width: 100%; height: 174px; display: block; margin: 4px 0 7px; border: 1px solid #ffffff0b; border-radius: 6px; background: #090a0b; }
 .curve-legend { display: flex; gap: 12px; margin-bottom: 14px; color: #686b6d; font-size: 8px; }
 .curve-legend span::before { content: ""; display: inline-block; width: 5px; height: 5px; border-radius: 50%; margin-right: 5px; background: #e8b562; }
 .curve-legend span:nth-child(2)::before { background: #d86f4a; }
 .curve-legend span:nth-child(3)::before { background: #6f9fd0; }
-.curve-legend span:nth-child(4)::before { background: #766aa8; }
+.curve-legend span:nth-child(4)::before { background: #e7ddd0; }
 .metric-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 7px 0; border-top: 1px solid #ffffff08; }
+.atmosphere-controls select { width: 100%; margin-top: 4px; color: #c9c7c1; background: #161718; border: 1px solid var(--line); border-radius: 8px; padding: 8px; font-size: 10px; }
+.atmosphere-controls details { margin-top: 10px; }
+.atmosphere-controls summary { color: #848687; cursor: pointer; font-size: 9px; }
+.profile-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 10px; }
+.profile-grid label { color: #686b6d; font-size: 8px; text-transform: uppercase; letter-spacing: .06em; }
+.profile-grid input { width: 100%; margin-top: 4px; padding: 6px; color: #c9c7c1; background: #111314; border: 1px solid var(--line); border-radius: 6px; font: 9px ui-monospace, monospace; }
+.model-notice { margin: 4px 0 12px; padding: 7px 8px; border-radius: 6px; font-size: 8px; line-height: 1.4; letter-spacing: .04em; }
+.model-notice.physical { color: #9ab39f; background: #63866c16; border: 1px solid #7ca98722; }
+.model-notice.reference { color: #b69b70; background: #b2874a12; border: 1px solid #c1904c22; }
 
 .bottombar { min-height: 56px; padding: 10px 28px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; color: #6f7273; font-size: 10px; }
 .legend { display: flex; gap: 18px; }

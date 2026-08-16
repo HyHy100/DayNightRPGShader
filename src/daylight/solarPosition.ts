@@ -4,24 +4,24 @@ const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
 
 export interface GeoLocation { lat: number; lon: number }
 export interface SolarEvents {
-  solarNoon: number;
-  sunrise: number;
-  sunset: number;
-  civilDawn: number;
-  civilDusk: number;
-  nauticalDawn: number;
-  nauticalDusk: number;
-  astronomicalDawn: number;
-  astronomicalDusk: number;
+  solarNoon:number;
+  sunrise:number|null; sunset:number|null;
+  civilDawn:number|null; civilDusk:number|null;
+  nauticalDawn:number|null; nauticalDusk:number|null;
+  astronomicalDawn:number|null; astronomicalDusk:number|null;
+  polarState:"normal"|"polar-day"|"polar-night";
 }
 export interface SolarPosition {
   elevation: number;
+  geometricElevation:number;
+  zenith:number;
   azimuth: number;
   declination: number;
   hourAngle: number;
   equationOfTime: number;
   solarTime: number;
   events: SolarEvents;
+  earthSunDistanceAU:number;
   located: boolean;
 }
 
@@ -43,43 +43,50 @@ function solarTerms(date: Date) {
   const declination = Math.asin(Math.sin(eps*RAD)*Math.sin(lambda*RAD))*DEG;
   const y = Math.tan(eps*RAD/2)**2;
   const equationOfTime = 4*DEG*(y*Math.sin(2*l0*RAD)-2*e*Math.sin(m*RAD)+4*e*y*Math.sin(m*RAD)*Math.cos(2*l0*RAD)-.5*y*y*Math.sin(4*l0*RAD)-1.25*e*e*Math.sin(2*m*RAD));
-  return {declination, equationOfTime};
+  const trueAnomaly=m+c;
+  const earthSunDistanceAU=1.000001018*(1-e*e)/(1+e*Math.cos(trueAnomaly*RAD));
+  return {declination, equationOfTime,earthSunDistanceAU};
 }
 
 function eventHourAngle(latitude: number, declination: number, zenith: number) {
   const cosH = (Math.cos(zenith*RAD) - Math.sin(latitude*RAD)*Math.sin(declination*RAD)) / (Math.cos(latitude*RAD)*Math.cos(declination*RAD));
-  return Math.acos(clamp(cosH,-1,1))*DEG;
+  return Math.abs(cosH)>1?null:Math.acos(cosH)*DEG;
 }
 
 export function calculateSolarEvents(date: Date, location: GeoLocation): SolarEvents {
   const {declination,equationOfTime} = solarTerms(date);
   const tz = -date.getTimezoneOffset();
   const noon = 720 - 4*location.lon - equationOfTime + tz;
-  const pair = (zenith: number) => {
-    const delta = eventHourAngle(location.lat,declination,zenith)*4;
+  const pair = (zenith: number):readonly [number|null,number|null] => {
+    const angle=eventHourAngle(location.lat,declination,zenith);if(angle===null)return [null,null];
+    const delta=angle*4;
     return [normMinutes(noon-delta)/60,normMinutes(noon+delta)/60] as const;
   };
   const sun=pair(90.833), civil=pair(96), nautical=pair(102), astro=pair(108);
-  return {solarNoon:normMinutes(noon)/60,sunrise:sun[0],sunset:sun[1],civilDawn:civil[0],civilDusk:civil[1],nauticalDawn:nautical[0],nauticalDusk:nautical[1],astronomicalDawn:astro[0],astronomicalDusk:astro[1]};
+  const noonElevation=90-Math.abs(location.lat-declination);
+  const midnightElevation=-(90-Math.abs(location.lat+declination));
+  const polarState:SolarEvents["polarState"]=sun[0]!==null?"normal":noonElevation>0&&midnightElevation>0?"polar-day":"polar-night";
+  return {solarNoon:normMinutes(noon)/60,sunrise:sun[0],sunset:sun[1],civilDawn:civil[0],civilDusk:civil[1],nauticalDawn:nautical[0],nauticalDusk:nautical[1],astronomicalDawn:astro[0],astronomicalDusk:astro[1],polarState};
 }
 
 /** NOAA-derived apparent solar position with refraction near the horizon. */
 export function calculateSolarPosition(date: Date, location: GeoLocation): SolarPosition {
-  const {declination,equationOfTime}=solarTerms(date);
+  const {declination,equationOfTime,earthSunDistanceAU}=solarTerms(date);
   const minutes=date.getHours()*60+date.getMinutes()+date.getSeconds()/60+date.getMilliseconds()/60000;
   const tz=-date.getTimezoneOffset();
   const trueSolar=normMinutes(minutes+equationOfTime+4*location.lon-tz);
   const hourAngle=(trueSolar/4<0?trueSolar/4+180:trueSolar/4-180);
   const lat=location.lat*RAD, dec=declination*RAD, ha=hourAngle*RAD;
   const zenith=Math.acos(clamp(Math.sin(lat)*Math.sin(dec)+Math.cos(lat)*Math.cos(dec)*Math.cos(ha),-1,1))*DEG;
-  let elevation=90-zenith;
+  const geometricElevation=90-zenith;
+  let elevation=geometricElevation;
   if(elevation>-1 && elevation<85){
     const te=Math.tan(elevation*RAD);
     const ref=elevation>5?(58.1/te-.07/(te**3)+.000086/(te**5))/3600:elevation>-.575?(1735+elevation*(-518.2+elevation*(103.4+elevation*(-12.79+elevation*.711))))/3600:(-20.772/te)/3600;
     elevation+=ref;
   }
   const azimuth=norm360(Math.atan2(Math.sin(ha),Math.cos(ha)*Math.sin(lat)-Math.tan(dec)*Math.cos(lat))*DEG+180);
-  return {elevation,azimuth,declination,hourAngle,equationOfTime,solarTime:trueSolar/60,events:calculateSolarEvents(date,location),located:true};
+  return {elevation,geometricElevation,zenith,azimuth,declination,hourAngle,equationOfTime,solarTime:trueSolar/60,events:calculateSolarEvents(date,location),earthSunDistanceAU,located:true};
 }
 
 /** Clock-only fallback still produces a continuous solar-like state. */
@@ -89,8 +96,8 @@ export function calculateFallbackSolarPosition(date: Date): SolarPosition {
   const hourAngle=(h-12)*15;
   // A C2-smooth 6:00–18:00 reference arc, extended below the horizon at night.
   const elevation=68*Math.sin((h-6)*Math.PI/12)-8;
-  const events={solarNoon:12,sunrise:6.5,sunset:17.5,civilDawn:6,civilDusk:18,nauticalDawn:5.5,nauticalDusk:18.5,astronomicalDawn:5,astronomicalDusk:19};
-  return {elevation,azimuth:norm360(90+(h-6)*15),declination:0,hourAngle,equationOfTime:0,solarTime,events,located:false};
+  const events={solarNoon:12,sunrise:6.5,sunset:17.5,civilDawn:6,civilDusk:18,nauticalDawn:5.5,nauticalDusk:18.5,astronomicalDawn:5,astronomicalDusk:19,polarState:"normal" as const};
+  return {elevation,geometricElevation:elevation,zenith:90-elevation,azimuth:norm360(90+(h-6)*15),declination:0,hourAngle,equationOfTime:0,solarTime,events,earthSunDistanceAU:1,located:false};
 }
 
 // Backward-compatible helpers used by external consumers.
