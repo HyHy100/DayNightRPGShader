@@ -5,3 +5,5 @@ export function rgbToOklab(rgb:Vec3):Vec3{const r=linear(rgb[0]),g=linear(rgb[1]
 export function oklabToRgb(lab:Vec3):Vec3{const l=(lab[0]+.396338*lab[1]+.215804*lab[2])**3,m=(lab[0]-.105561*lab[1]-.063854*lab[2])**3,s=(lab[0]-.089484*lab[1]-1.291486*lab[2])**3;return [gamma(4.076742*l-3.307712*m+.230970*s),gamma(-1.268438*l+2.609758*m-.341319*s),gamma(-.004196*l-.703419*m+1.707615*s)];}
 export function mixOklab(a:Vec3,b:Vec3,t:number):Vec3{const x=rgbToOklab(a),y=rgbToOklab(b);return oklabToRgb([x[0]+(y[0]-x[0])*t,x[1]+(y[1]-x[1])*t,x[2]+(y[2]-x[2])*t]);}
 export const rgbOffset=(rgb:Vec3,scale:number):Vec3=>{const mean=(rgb[0]+rgb[1]+rgb[2])/3;return [(rgb[0]-mean)*scale,(rgb[1]-mean)*scale,(rgb[2]-mean)*scale];};
+/** Chromatic offset whose Rec.709 luminance contribution is exactly zero. */
+export const lumaOffset=(rgb:Vec3,scale:number):Vec3=>{const y=.2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2];return [(rgb[0]-y)*scale,(rgb[1]-y)*scale,(rgb[2]-y)*scale];};

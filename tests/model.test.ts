@@ -6,6 +6,7 @@ import { daylightAt } from "../src/daylight/daylightModel";
 import { calculateLunarPosition } from "../src/daylight/lunarPosition";
 import { calculateMoonlight,calculateStoryMoonlight,UNAVAILABLE_MOONLIGHT } from "../src/daylight/moonlightModel";
 import { calculateSolarPosition } from "../src/daylight/solarPosition";
+import { lumaOffset } from "../src/daylight/perceptualColor";
 import { exportFilename,exportFrameCount,exportFrameProgress,getExportDimensions,sampleDayCycleTimeline } from "../src/export/videoExportModel";
 import { extractWebMVideoFrames,muxWebM } from "../src/export/webmMuxer";
 
@@ -210,6 +211,15 @@ test("night uses tonal blue separation instead of a flat global cast",()=>{
   assert.ok(Math.abs(night.highlights[2]-night.highlights[0])<.012,"night highlights should remain neutral/silver rather than blue");
   assert.ok(night.shadows[2]-night.shadows[0]>noon.shadows[2]-noon.shadows[0]+.018,"night separation must be distinct from neutral daylight");
   assert.ok(Math.abs(night.temperature)<.5,"artistic night must not rely on an extreme global white-balance shift");
+});
+
+test("night blue adaptation preserves luminance and replaces excess density",()=>{
+  const offset=lumaOffset([.46,.61,1],.26);
+  assert.ok(Math.abs(.2126*offset[0]+.7152*offset[1]+.0722*offset[2])<1e-12,"blue separation must not darken Rec.709 luminance");
+  const config={illuminatedFraction:.73,transitHour:0,maximumElevation:68,waxing:true};
+  const night=daylightAt(0,new Date("2026-08-16T12:00:00-03:00"),null,ATMOSPHERE_PRESETS.Standard,config).grade;
+  assert.ok(night.shadows[2]>night.shadows[0]+.045,"dark adaptation should read through blue tonal separation");
+  assert.ok(night.lift[2]>night.lift[0]+.006,"night toe should open toward blue rather than only crush luminance");
 });
 
 test("night preserves encoded practical-light contrast without enabling fake daytime HDR",()=>{

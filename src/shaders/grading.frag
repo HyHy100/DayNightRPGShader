@@ -78,8 +78,8 @@ vec3 grade(vec3 source) {
   float dayForNight = smoothstep(0.35, 1.05, -uExposure);
   float daylightY = luminance(c);
   float sunlitMask = smoothstep(0.045, 0.52, daylightY);
-  c *= 1.0 - dayForNight * sunlitMask * 0.30;
-  c = mix(c, vec3(luminance(c)), dayForNight * sunlitMask * 0.12);
+  c *= 1.0 - dayForNight * sunlitMask * 0.20;
+  c = mix(c, vec3(luminance(c)), dayForNight * sunlitMask * 0.075);
 
   // Log-like lift/gamma/gain preserves ordering and keeps negative excursions controlled.
   c = max(c + uLift, vec3(0.0));
