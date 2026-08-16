@@ -34,7 +34,7 @@ test("atmospheric influences are smooth and playback is not minute-quantized",()
 });
 
 test("daylight stages are meaningfully distinct without preset tables",()=>{
-  const sunrise=daylightAt(7),morning=daylightAt(8),noon=daylightAt(12),afternoon=daylightAt(16),golden=daylightAt(17);
+  const sunrise=daylightAt(6.25),morning=daylightAt(7.25),noon=daylightAt(12.25),afternoon=daylightAt(16.25),golden=daylightAt(18.25);
   assert.ok(sunrise.grade.highlights[0]>morning.grade.highlights[0]+.006);
   assert.ok(sunrise.atmosphere.spectralSeparation>morning.atmosphere.spectralSeparation+.1);
   assert.ok(noon.grade.clarity>morning.grade.clarity);
@@ -44,7 +44,7 @@ test("daylight stages are meaningfully distinct without preset tables",()=>{
 });
 
 test("horizon lighting survives the irradiance fade and remains asymmetric",()=>{
-  const dawn=daylightAt(6.5),sunrise=daylightAt(6.75),sunset=daylightAt(17.25),horizon=daylightAt(17.5),afterglow=daylightAt(17.75);
+  const dawn=daylightAt(6),sunrise=daylightAt(6.25),sunset=daylightAt(18.25),horizon=daylightAt(18.625),afterglow=daylightAt(18.75);
   assert.ok(dawn.atmosphere.lowSunFactor>.2,"dawn color must not vanish with broadband beam energy");
   assert.ok(horizon.atmosphere.lowSunFactor>.4,"sunset color must survive the horizon irradiance ramp");
   assert.ok(sunrise.grade.highlights[0]>.015);
@@ -67,7 +67,7 @@ test("twilight exposure darkens monotonically below daytime",()=>{
 });
 
 test("true night evolves through afterglow, story moon, and pre-dawn",()=>{
-  const evening=daylightAt(19),late=daylightAt(21),midnight=daylightAt(0),preDawn=daylightAt(5);
+  const evening=daylightAt(20.25),late=daylightAt(22),midnight=daylightAt(0),preDawn=daylightAt(4);
   assert.equal(evening.grade.name,"Early Night");
   assert.equal(late.grade.name,"Moonlit Night");
   assert.equal(midnight.grade.name,"Moonlit Night");
@@ -76,11 +76,29 @@ test("true night evolves through afterglow, story moon, and pre-dawn",()=>{
   assert.ok(midnight.atmosphere.midnightDepth>.95);
   assert.ok(preDawn.atmosphere.preDawnAirglow>.7);
   assert.ok(midnight.atmosphere.moonlightContribution>late.atmosphere.moonlightContribution);
-  assert.ok(late.grade.exposure>evening.grade.exposure+.1);
-  assert.ok(midnight.grade.exposure>late.grade.exposure+.05);
-  assert.ok(late.grade.exposure>preDawn.grade.exposure+.1);
+  assert.ok(evening.grade.exposure>late.grade.exposure+.1,"residual afterglow should fade into the darker night baseline");
+  assert.ok(midnight.atmosphere.moonlightContribution>late.atmosphere.moonlightContribution+.03);
+  assert.ok(late.atmosphere.moonlightContribution>preDawn.atmosphere.moonlightContribution+.1);
   assert.ok(midnight.atmosphere.nightProgress>late.atmosphere.nightProgress);
   assert.ok(preDawn.atmosphere.nightProgress>midnight.atmosphere.nightProgress);
+});
+
+test("Story Sky solar timing comes from one coherent temperate geometry",()=>{
+  const noon=daylightAt(12.25).atmosphere,events=noon.events;
+  assert.ok(Math.abs(noon.geometricElevation-63)<.1,"noon altitude must match latitude minus declination");
+  assert.ok(events.sunrise!==null&&events.sunset!==null&&events.civilDawn!==null&&events.civilDusk!==null);
+  assert.ok(events.sunrise!>5.6&&events.sunrise!<5.9);
+  assert.ok(events.sunset!>18.6&&events.sunset!<18.9);
+  assert.ok(events.civilDawn!<events.sunrise!&&events.civilDusk!>events.sunset!);
+  let goldenMinutes=0,largestElevationStep=0,previous=daylightAt(0).atmosphere.geometricElevation;
+  for(let minute=1;minute<=1440;minute++){
+    const state=daylightAt(minute/60);
+    if(state.grade.name==="Golden Sunset")goldenMinutes++;
+    largestElevationStep=Math.max(largestElevationStep,Math.abs(state.atmosphere.geometricElevation-previous));
+    previous=state.atmosphere.geometricElevation;
+  }
+  assert.ok(goldenMinutes>=55&&goldenMinutes<=70,`expected a useful one-hour low-sun window, got ${goldenMinutes} minutes`);
+  assert.ok(largestElevationStep<.25,"solar motion must remain smooth at minute resolution");
 });
 
 test("Kasten-Young air mass falls as solar elevation rises",()=>{

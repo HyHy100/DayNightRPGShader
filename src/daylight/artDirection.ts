@@ -24,7 +24,7 @@ export function daylightPhase(s:AtmosphereState){
   if(e<-12)return ["Astronomical Twilight","Last atmospheric blue above night"] as const;
   if(e<-6)return ["Nautical Twilight","Deep blue environment · minimal direct light"] as const;
   if(e<0)return ["Civil Twilight",s.evening?"Warm horizon fading into cool sky":"Fragile blue dawn before direct sun"] as const;
-  if(e<8)return [s.evening?"Golden Sunset":"Early Sunrise",s.evening?"Amber low sun · cool environmental separation":"Warm low sun · clean cool skylight"] as const;
+  if(e<12)return [s.evening?"Golden Sunset":"Early Sunrise",s.evening?"Amber low sun · cool environmental separation":"Warm low sun · clean cool skylight"] as const;
   if(e<25)return [s.evening?"Late Afternoon":"Early Morning",s.evening?"Directional warmth gathering gradually":"Sunlight cleaning toward yellow-white"] as const;
   if(e<50)return [s.evening?"Early Afternoon":"Late Morning",s.evening?"Neutral light gaining midtone richness":"Bright clean directional daylight"] as const;
   return ["High Solar Daylight","Neutral direct sun · minimal atmospheric path"] as const;

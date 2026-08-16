@@ -58,7 +58,7 @@ export function calculateAtmosphereState(solar:SolarPosition,profile:AtmosphereP
   const lowSunAirMass=clamp01((irradiance.opticalAirMass-1)/8);
   const lowSunPresence=smootherstep(-1.5,1.5,e)*(1-smootherstep(14,34,e));
   const lowSunBeam=.58+.42*smootherstep(0,10,e);
-  const lowSunAbove=lowSunAirMass*lowSunPresence*lowSunBeam*smootherstep(0,3,e),lowSunBelow=subHorizonGlow*.55;
+  const lowSunAbove=lowSunAirMass*lowSunPresence*lowSunBeam*smootherstep(0,3,e),lowSunBelow=subHorizonGlow*.60;
   const lowSunFactor=1-(1-lowSunAbove)*(1-lowSunBelow);
   const twilight=smootherstep(-20,-8,e)*(1-smootherstep(-8,8,e));
   const night=1-smootherstep(-24,-8,e);

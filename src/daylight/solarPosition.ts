@@ -53,6 +53,14 @@ function eventHourAngle(latitude: number, declination: number, zenith: number) {
   return Math.abs(cosH)>1?null:Math.acos(cosH)*DEG;
 }
 
+function atmosphericRefraction(elevation:number){
+  if(elevation<=-1||elevation>=85)return 0;
+  const te=Math.tan(elevation*RAD);
+  return elevation>5?(58.1/te-.07/(te**3)+.000086/(te**5))/3600
+    :elevation>-.575?(1735+elevation*(-518.2+elevation*(103.4+elevation*(-12.79+elevation*.711))))/3600
+    :(-20.772/te)/3600;
+}
+
 export function calculateSolarEvents(date: Date, location: GeoLocation): SolarEvents {
   const {declination,equationOfTime} = solarTerms(date);
   const tz = -date.getTimezoneOffset();
@@ -79,25 +87,34 @@ export function calculateSolarPosition(date: Date, location: GeoLocation): Solar
   const lat=location.lat*RAD, dec=declination*RAD, ha=hourAngle*RAD;
   const zenith=Math.acos(clamp(Math.sin(lat)*Math.sin(dec)+Math.cos(lat)*Math.cos(dec)*Math.cos(ha),-1,1))*DEG;
   const geometricElevation=90-zenith;
-  let elevation=geometricElevation;
-  if(elevation>-1 && elevation<85){
-    const te=Math.tan(elevation*RAD);
-    const ref=elevation>5?(58.1/te-.07/(te**3)+.000086/(te**5))/3600:elevation>-.575?(1735+elevation*(-518.2+elevation*(103.4+elevation*(-12.79+elevation*.711))))/3600:(-20.772/te)/3600;
-    elevation+=ref;
-  }
+  const elevation=geometricElevation+atmosphericRefraction(geometricElevation);
   const azimuth=norm360(Math.atan2(Math.sin(ha),Math.cos(ha)*Math.sin(lat)-Math.tan(dec)*Math.cos(lat))*DEG+180);
   return {elevation,geometricElevation,zenith,azimuth,declination,hourAngle,equationOfTime,solarTime:trueSolar/60,events:calculateSolarEvents(date,location),earthSunDistanceAU,located:true};
 }
 
-/** Clock-only fallback still produces a continuous solar-like state. */
+export const STORY_SKY_SOLAR_RIG={latitude:35,declination:8,solarNoon:12.25} as const;
+
+/**
+ * Location-free but internally coherent temperate solar rig for fictional
+ * scenes. Unlike the old fitted sine wave, altitude, azimuth, day length and
+ * every twilight crossing all come from the same spherical geometry.
+ */
 export function calculateFallbackSolarPosition(date: Date): SolarPosition {
   const h=date.getHours()+date.getMinutes()/60+date.getSeconds()/3600+date.getMilliseconds()/3600000;
-  const solarTime=h;
-  const hourAngle=(h-12)*15;
-  // A C2-smooth 6:00–18:00 reference arc, extended below the horizon at night.
-  const elevation=68*Math.sin((h-6)*Math.PI/12)-8;
-  const events={solarNoon:12,sunrise:6.5,sunset:17.5,civilDawn:6,civilDusk:18,nauticalDawn:5.5,nauticalDusk:18.5,astronomicalDawn:5,astronomicalDusk:19,polarState:"normal" as const};
-  return {elevation,geometricElevation:elevation,zenith:90-elevation,azimuth:norm360(90+(h-6)*15),declination:0,hourAngle,equationOfTime:0,solarTime,events,earthSunDistanceAU:1,located:false};
+  const {latitude,declination,solarNoon}=STORY_SKY_SOLAR_RIG;
+  const hourAngle=norm360((h-solarNoon)*15+180)-180;
+  const lat=latitude*RAD,dec=declination*RAD,ha=hourAngle*RAD;
+  const zenith=Math.acos(clamp(Math.sin(lat)*Math.sin(dec)+Math.cos(lat)*Math.cos(dec)*Math.cos(ha),-1,1))*DEG;
+  const geometricElevation=90-zenith;
+  const elevation=geometricElevation+atmosphericRefraction(geometricElevation);
+  const azimuth=norm360(Math.atan2(Math.sin(ha),Math.cos(ha)*Math.sin(lat)-Math.tan(dec)*Math.cos(lat))*DEG+180);
+  const pair=(zenithAngle:number):readonly[number|null,number|null]=>{
+    const angle=eventHourAngle(latitude,declination,zenithAngle);
+    return angle===null?[null,null]:[solarNoon-angle/15,solarNoon+angle/15];
+  };
+  const sun=pair(90.833),civil=pair(96),nautical=pair(102),astro=pair(108);
+  const events:SolarEvents={solarNoon,sunrise:sun[0],sunset:sun[1],civilDawn:civil[0],civilDusk:civil[1],nauticalDawn:nautical[0],nauticalDusk:nautical[1],astronomicalDawn:astro[0],astronomicalDusk:astro[1],polarState:"normal"};
+  return {elevation,geometricElevation,zenith,azimuth,declination,hourAngle,equationOfTime:0,solarTime:h,events,earthSunDistanceAU:1,located:false};
 }
 
 // Backward-compatible helpers used by external consumers.
