@@ -16,7 +16,8 @@ export function daylightPhase(s:AtmosphereState){
   // safe continuous control signal for grading.
   const e=s.geometricElevation;
   if(e<-18){
-    if(s.eveningAfterglow>.12&&s.moonlightContribution>.25)return ["Moonrise Transition","Rising Moon gradually overtaking residual evening afterglow"] as const;
+    const storyMoonVisible=s.moon.quality==="story-sky"&&(s.moon.position?.illuminatedFraction??0)>.08&&(s.moon.position?.geometricElevation??-90)>5;
+    if(s.eveningAfterglow>.12&&(s.moonlightContribution>.06||storyMoonVisible))return ["Moonrise Transition","Rising Moon gradually overtaking residual evening afterglow"] as const;
     if(s.eveningAfterglow>.12)return ["Early Night","Residual upper-atmosphere glow fading into night"] as const;
     if(s.preDawnAirglow>.12)return ["Pre-dawn Night","Airglow strengthening before astronomical dawn"] as const;
     if(s.moonlightContribution>.06)return ["Moonlit Night",`${Math.round((s.moon.position?.illuminatedFraction??0)*100)}% ${s.moon.quality==="story-sky"?"Story Moon · art-directed night adaptation":"Moon · clear-sky adapted illumination"}`] as const;
@@ -62,12 +63,15 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   // appearing to brighten as civil twilight gives way to nautical twilight.
   const moonNightTone=moon*smootherstep(12,20,-elevation);
   const moonIllumination=s.moon.position?.illuminatedFraction??0;
-  const fullMoonResponse=storySky*smootherstep(.62,.995,moonIllumination);
-  // A fictional full Moon is an authoring light, not a claim of terrestrial
-  // photometry. Its extra stop follows actual lunar contribution rather than
-  // an arbitrary solar-depression ramp, preventing the end of Early Night from
-  // brightening merely because the Sun crossed another invisible boundary.
-  const storyFullMoon=fullMoonResponse*smootherstep(18,20,-elevation)*smootherstep(.45,.88,moon);
+  const moonElevation=s.moon.position?.geometricElevation??-90;
+  // The Story Moon slider is an art-directable illumination control. Physical
+  // phase lux remains nonlinear, but a perceptual square-root-like response
+  // keeps quarter, half, and gibbous values useful instead of reserving nearly
+  // all visible adaptation for 95–100%. Moon altitude and deep-night adaptation
+  // still gate the result continuously; a Moon below the horizon contributes 0.
+  const storyMoonPhase=storySky*smootherstep(.015,.28,moonIllumination)*Math.pow(clamp(moonIllumination),.10);
+  const lunarNightVisibility=s.evening?smootherstep(18,34,-elevation):smootherstep(12,30,-elevation);
+  const storyMoonAdaptation=storyMoonPhase*smootherstep(0,24,moonElevation)*lunarNightVisibility;
   // In Story Sky mode the frame is a fictional scene, so low evening sun is
   // allowed a little more photographic presence than a strict clear-sky
   // adaptation. Keep it tied to physical elevation and evening geometry.
@@ -90,7 +94,7 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   const coolSeparation=clamp(s.skyCoolness*(.26+.35*(1-noon))+.20*lowSun*(.55+.45*s.spectralSeparation)+.07*morningFreshness+.11*morningCharacter+.13*afternoonCharacter-.100*noonCrown+.06*s.eveningAfterglow+.08*s.preDawnAirglow-.05*deepNightDensity);
   const exposure=-.04+.14*noon-.12*(1-noon)*daylight-.08*s.haze*skyIllumination-.03*afternoon
     -3.0*solarDarkening-.20*deepNightDensity
-    +.05*s.eveningAfterglow+.04*s.preDawnAirglow+.025*s.scotopicAdaptation+(.45+.50*storySky)*moon+.95*storyFullMoon+.065*storyGolden
+    +.05*s.eveningAfterglow+.04*s.preDawnAirglow+.025*s.scotopicAdaptation+(.45+.50*storySky)*moon+1.45*storyMoonAdaptation+.065*storyGolden
     -.090*morningCharacter+.120*noonCrown-.060*afternoonCharacter;
   const temperature=s.sunWarmth*(.40+.16*eveningBias)-s.skyCoolness*.12*s.twilight-s.night*.25-.07*deepNightDensity-.04*s.preDawnAirglow+afternoonWarmth*.11-morningFreshness*.025-.018*moon+.090*storyGolden
     +.180*morningCharacter-.080*noonCrown+.220*afternoonCharacter;
@@ -119,12 +123,12 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   // intentionally well below 18% display gray: dark RPG/visual-novel plates
   // often contain no specular values above 0.3 after their night/day grade.
   // The former 0.34 floor therefore extracted virtually no energy.
-  const bloomStrength=.055+.135*opticalDaylight+.165*lowSun+.040*noonCrown-.060*s.night+.300*storyFullMoon;
-  const bloomThreshold=.115+.065*noonCrown+.275*s.night-.050*lowSun-.025*storyGolden-.340*storyFullMoon;
+  const bloomStrength=.055+.135*opticalDaylight+.165*lowSun+.040*noonCrown-.060*s.night+.300*storyMoonAdaptation;
+  const bloomThreshold=.115+.065*noonCrown+.275*s.night-.050*lowSun-.025*storyGolden-.340*storyMoonAdaptation;
   const bloomKnee=.085+.060*lowSun+.018*s.haze;
   const halationStrength=.014+.175*lowSun*(.60+.40*s.sunWarmth)+.055*storyGolden+.018*afternoonCharacter;
   const glareStrength=.008+.075*lowSun*(.55+.45*s.haze)+.042*storyGolden+.010*noonCrown;
-  const moonGlowStrength=.65*storyFullMoon;
+  const moonGlowStrength=.65*storyMoonAdaptation;
   const [name,description]=daylightPhase(s);
   return {hour,name,description,exposure,temperature,tint,contrast,saturation,vibrance,lift,gamma,gain,shadows,midtones,highlights,
     blackPoint:Math.max(0,.003+.010*s.night+.007*deepNightDensity-.003*s.scotopicAdaptation+.002*s.twilight-(.003+.008*storySky)*moonNightTone-.0015*storyGolden-.001*morningCharacter+.0012*afternoonCharacter),

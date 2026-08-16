@@ -34,14 +34,26 @@ test("optical response emerges at low sun and remains restrained at night",()=>{
   assert.ok(golden.bloomStrength>.2,"full optical control must be visibly authorable");
 });
 
-test("a full Story Moon adds one-stop adaptation and silver optical response",()=>{
+test("the full Story Moon range drives useful adaptation and silver optical response",()=>{
   const config=(illuminatedFraction:number)=>({illuminatedFraction,transitHour:0,maximumElevation:68,waxing:true});
   const base=new Date("2026-08-16T12:00:00-03:00"),profile=ATMOSPHERE_PRESETS.Standard;
+  const moonless=daylightAt(0,base,null,profile,config(.001)).grade;
+  const quarter=daylightAt(0,base,null,profile,config(.25)).grade;
   const half=daylightAt(0,base,null,profile,config(.50)).grade;
   const full=daylightAt(0,base,null,profile,config(1)).grade;
-  assert.ok(full.exposure>half.exposure+.9,"full Story Moon should add approximately one photographic stop over half Moon");
+  assert.ok(quarter.exposure>moonless.exposure+1.1,"quarter Moon must be visibly useful in Story Sky");
+  assert.ok(half.exposure>quarter.exposure+.25,"quarter-to-half Moon must retain meaningful exposure range");
+  assert.ok(full.exposure>half.exposure+.7,"half-to-full Moon must retain meaningful exposure range");
+  assert.ok(half.moonGlowStrength>.4,"half Moon should already drive a usable silver optical response");
   assert.ok(full.moonGlowStrength>.5,"full Story Moon should drive a visible silver optical response");
   assert.ok(full.bloomThreshold<.08,"full-Moon extraction must reach highlights in dark story plates");
+  let previous=moonless;
+  for(let percent=1;percent<=100;percent++){
+    const current=daylightAt(0,base,null,profile,config(percent/100)).grade;
+    assert.ok(current.exposure>=previous.exposure-.001,`Moon exposure must rise monotonically at ${percent}%`);
+    assert.ok(current.exposure-previous.exposure<.12,`Moon exposure step is too large at ${percent}%`);
+    previous=current;
+  }
 });
 
 test("atmospheric influences are smooth and playback is not minute-quantized",()=>{
