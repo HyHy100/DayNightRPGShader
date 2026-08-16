@@ -44,6 +44,11 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   const deepNightDensity=s.night*(.60*s.deepNightDepth+.40*s.midnightDepth);
   const moon=s.moonlightContribution;
   const storySky=s.moon.quality==="story-sky"?1:0;
+  // Lunar chromatic information may become perceptible during twilight, but
+  // toe/lift adaptation belongs to the much darker astronomical/night regime.
+  // Delaying those additive controls prevents a dark source image from
+  // appearing to brighten as civil twilight gives way to nautical twilight.
+  const moonNightTone=moon*smootherstep(12,20,-elevation);
   // In Story Sky mode the frame is a fictional scene, so low evening sun is
   // allowed a little more photographic presence than a strict clear-sky
   // adaptation. Keep it tied to physical elevation and evening geometry.
@@ -78,14 +83,14 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   // black floor or collapsing the direct-sun / cool-sky separation.
   const midtoneSun=.45+.34*storyGolden;
   const midtones:Vec3=[highlights[0]*midtoneSun+shadows[0]*.22,highlights[1]*midtoneSun+shadows[1]*.22,highlights[2]*midtoneSun+shadows[2]*.22];
-  const nightLift=-.007*s.night-.003*deepNightDensity+.002*s.scotopicAdaptation+.001*s.twilight+(.003+.006*storySky)*moon;
+  const nightLift=-.007*s.night-.003*deepNightDensity+.002*s.scotopicAdaptation+.001*s.twilight+(.003+.006*storySky)*moonNightTone;
   const lift:Vec3=[nightLift-s.night*.003,nightLift,nightLift+s.night*.004+s.twilight*.001+moon*.001];
-  const gamma:Vec3=[1-.030*s.night+.006*s.haze+moon*.003,1-.014*s.night+.006*s.haze+moon*.004,1+.009*s.night+.003*s.twilight+moon*.004];
-  const gain:Vec3=[1-.055*s.night+highlights[0]*.22+moon*.004,1-.025*s.night+highlights[1]*.22+moon*.006,1+.010*s.night+highlights[2]*.22+moon*.007];
+  const gamma:Vec3=[1-.030*s.night+.006*s.haze+moonNightTone*.003,1-.014*s.night+.006*s.haze+moonNightTone*.004,1+.009*s.night+.003*s.twilight+moonNightTone*.004];
+  const gain:Vec3=[1-.055*s.night+highlights[0]*.22+moonNightTone*.004,1-.025*s.night+highlights[1]*.22+moonNightTone*.006,1+.010*s.night+highlights[2]*.22+moonNightTone*.007];
   const [name,description]=daylightPhase(s);
   return {hour,name,description,exposure,temperature,tint,contrast,saturation,vibrance,lift,gamma,gain,shadows,midtones,highlights,
-    blackPoint:Math.max(0,.003+.010*s.night+.007*deepNightDensity-.003*s.scotopicAdaptation+.002*s.twilight-(.003+.008*storySky)*moon-.0015*storyGolden),
+    blackPoint:Math.max(0,.003+.010*s.night+.007*deepNightDensity-.003*s.scotopicAdaptation+.002*s.twilight-(.003+.008*storySky)*moonNightTone-.0015*storyGolden),
     highlightRolloff:.28+.25*noon+.20*lowSun+.16*s.twilight+.14*s.night,
-    clarity:.065*noon-.055*s.haze-.025*s.twilight+.012*moon,
+    clarity:.065*noon-.055*s.haze-.025*s.twilight+.012*moonNightTone,
     filmStrength:.42+.20*lowSun+.18*s.twilight+.20*s.night+.08*deepNightDensity};
 }

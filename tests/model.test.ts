@@ -76,6 +76,9 @@ test("a full Story Moon cannot invert the evening twilight brightness hierarchy"
   const civil=daylightAt(18.9).grade,nautical=daylightAt(19.4).grade,astronomical=daylightAt(19.9).grade;
   assert.ok(civil.exposure>nautical.exposure+.2);
   assert.ok(nautical.exposure>astronomical.exposure+.2);
+  const nauticalStart=daylightAt(19.15).grade,nauticalEnd=daylightAt(19.6).grade;
+  assert.ok(nauticalEnd.lift[1]<=nauticalStart.lift[1]+.0002,"lunar toe adaptation must not lift nautical twilight");
+  assert.ok(nauticalEnd.blackPoint>=nauticalStart.blackPoint-.0005,"lunar black-point opening must wait until astronomical twilight");
 });
 
 test("true night evolves through afterglow, story moon, and pre-dawn",()=>{
