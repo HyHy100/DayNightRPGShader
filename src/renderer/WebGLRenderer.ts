@@ -11,6 +11,7 @@ import { ShaderProgram } from "./ShaderProgram";
 import { createFilmLut, loadImageTexture } from "./TextureLoader";
 
 export type ComparisonMode = "graded" | "split" | "original";
+export interface WebGLRendererOptions { width?: number; height?: number; observeResize?: boolean }
 
 interface RenderTarget { texture: WebGLTexture; framebuffer: WebGLFramebuffer; width: number; height: number }
 
@@ -39,9 +40,9 @@ export class WebGLRenderer {
   private pendingWidth = 1;
   private pendingHeight = 1;
   private destroyed = false;
-  private resizeObserver: ResizeObserver;
+  private resizeObserver: ResizeObserver | null = null;
 
-  constructor(private canvas: HTMLCanvasElement) {
+  constructor(private canvas: HTMLCanvasElement, options: WebGLRendererOptions = {}) {
     const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, depth: false, stencil: false, preserveDrawingBuffer: true, powerPreference: "high-performance" });
     if (!gl) throw new Error("WebGL2 is required for the daylight grading pipeline.");
     this.gl = gl;
@@ -62,9 +63,13 @@ export class WebGLRenderer {
     this.setSampler(this.compositeShader, "uScene", 1);
     this.setSampler(this.compositeShader, "uBloomTight", 2);
     this.setSampler(this.compositeShader, "uBloomWide", 3);
-    this.resizeObserver = new ResizeObserver(() => this.resize());
-    this.resizeObserver.observe(canvas.parentElement ?? canvas);
-    this.resize();
+    if (options.width && options.height) {
+      this.pendingWidth = Math.max(1, Math.round(options.width)); this.pendingHeight = Math.max(1, Math.round(options.height));
+      canvas.width = this.pendingWidth; canvas.height = this.pendingHeight;
+    } else {
+      if (options.observeResize !== false) { this.resizeObserver = new ResizeObserver(() => this.resize()); this.resizeObserver.observe(canvas.parentElement ?? canvas); }
+      this.resize();
+    }
   }
 
   private setSampler(shader: ShaderProgram, name: string, unit: number) { shader.use(); this.gl.uniform1i(shader.uniform(name), unit); }
@@ -125,6 +130,7 @@ export class WebGLRenderer {
   setOpticalGlow(value: number) { this.opticalGlow = Math.max(0, Math.min(1.5, value)); this.draw(); }
   setSplit(value: number) { this.split = Math.max(0, Math.min(1, value)); this.draw(); }
   setComparison(mode: ComparisonMode) { this.comparison = mode; this.draw(); }
+  renderFrame() { if (this.frame) cancelAnimationFrame(this.frame); this.frame = 0; this.render(); }
 
   private resize() {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -142,8 +148,11 @@ export class WebGLRenderer {
 
   private draw() {
     if (this.frame || this.destroyed) return;
-    this.frame = requestAnimationFrame(() => {
-      this.frame = 0; const { gl, canvas } = this;
+    this.frame = requestAnimationFrame(() => this.render());
+  }
+
+  private render() {
+      this.frame = 0; if (this.destroyed) return; const { gl, canvas } = this;
       if (canvas.width !== this.pendingWidth || canvas.height !== this.pendingHeight) { canvas.width = this.pendingWidth; canvas.height = this.pendingHeight; }
       this.ensureTargets(canvas.width, canvas.height); this.bindTarget(null, canvas.width, canvas.height);
       gl.clearColor(.018,.019,.020,1); gl.clear(gl.COLOR_BUFFER_BIT);
@@ -171,12 +180,11 @@ export class WebGLRenderer {
       gl.uniform2f(s.uniform("uImageScale"),scale[0],scale[1]);gl.uniform1f(s.uniform("uIntensity"),this.intensity);gl.uniform1f(s.uniform("uSplit"),this.split);
       gl.uniform1i(s.uniform("uComparisonMode"),this.comparison==="split"?1:this.comparison==="original"?2:0);gl.uniform1f(s.uniform("uOpticalGlow"),this.opticalGlow);
       gl.uniform1f(s.uniform("uBloomStrength"),g.bloomStrength);gl.uniform1f(s.uniform("uHalationStrength"),g.halationStrength);gl.uniform1f(s.uniform("uGlareStrength"),g.glareStrength);gl.uniform1f(s.uniform("uMoonGlowStrength"),g.moonGlowStrength);
-      gl.drawArrays(gl.TRIANGLES,0,6);
-    });
+      gl.drawArrays(gl.TRIANGLES,0,6); gl.flush();
   }
 
   destroy() {
-    this.destroyed=true;cancelAnimationFrame(this.frame);this.frame=0;this.resizeObserver.disconnect();
+    this.destroyed=true;cancelAnimationFrame(this.frame);this.frame=0;this.resizeObserver?.disconnect();
     for(const t of this.targets){this.gl.deleteTexture(t.texture);this.gl.deleteFramebuffer(t.framebuffer);} this.gl.deleteVertexArray(this.vao);
     if(this.imageTexture)this.gl.deleteTexture(this.imageTexture);this.gl.deleteTexture(this.lutTexture);
     this.gradeShader.destroy();this.brightShader.destroy();this.blurShader.destroy();this.downsampleShader.destroy();this.compositeShader.destroy();

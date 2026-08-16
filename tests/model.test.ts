@@ -6,6 +6,22 @@ import { daylightAt } from "../src/daylight/daylightModel";
 import { calculateLunarPosition } from "../src/daylight/lunarPosition";
 import { calculateMoonlight,calculateStoryMoonlight,UNAVAILABLE_MOONLIGHT } from "../src/daylight/moonlightModel";
 import { calculateSolarPosition } from "../src/daylight/solarPosition";
+import { chooseWebMMimeType,exportFilename,getExportDimensions,sampleDayCycleTimeline } from "../src/export/videoExportModel";
+
+test("video export maps one chronological local day without quantization",()=>{
+  const base=new Date(2026,7,16,12),start=sampleDayCycleTimeline(base,0),quarter=sampleDayCycleTimeline(base,.25),end=sampleDayCycleTimeline(base,1);
+  assert.equal(start.hour,0);assert.equal(quarter.hour,6);assert.equal(end.hour,0);
+  assert.equal(start.date.getDate(),16);assert.equal(end.date.getDate(),17);
+  let previous=start.date.getTime();
+  for(let frame=1;frame<=450;frame++){const sample=sampleDayCycleTimeline(base,frame/450);assert.ok(sample.date.getTime()>previous);previous=sample.date.getTime();}
+});
+
+test("video export selects WebM fallbacks and stable output metadata",()=>{
+  assert.deepEqual(getExportDimensions("1080p"),{width:1920,height:1080});assert.deepEqual(getExportDimensions("720p"),{width:1280,height:720});
+  assert.equal(chooseWebMMimeType(type=>type.includes("vp8")),"video/webm;codecs=vp8");
+  assert.equal(chooseWebMMimeType(()=>false),null);
+  assert.equal(exportFilename(new Date(2026,7,16),"comparison"),"daylight-cycle-2026-08-16-comparison.webm");
+});
 
 test("the 24-hour physical model closes seamlessly",()=>{
   const a=daylightAt(0),b=daylightAt(24);
