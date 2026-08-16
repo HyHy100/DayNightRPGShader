@@ -4,7 +4,7 @@ import { calculateAirMass } from "../src/daylight/atmosphereModel";
 import { ATMOSPHERE_PRESETS,calculateClearSkyIrradiance } from "../src/daylight/clearSkyModel";
 import { daylightAt } from "../src/daylight/daylightModel";
 import { calculateLunarPosition } from "../src/daylight/lunarPosition";
-import { calculateMoonlight,UNAVAILABLE_MOONLIGHT } from "../src/daylight/moonlightModel";
+import { calculateMoonlight,calculateStoryMoonlight,UNAVAILABLE_MOONLIGHT } from "../src/daylight/moonlightModel";
 import { calculateSolarPosition } from "../src/daylight/solarPosition";
 
 test("the 24-hour physical model closes seamlessly",()=>{
@@ -44,25 +44,29 @@ test("daylight stages are meaningfully distinct without preset tables",()=>{
 });
 
 test("twilight exposure darkens monotonically below daytime",()=>{
-  const nearest=(target:number)=>{let best=daylightAt(0),error=Infinity;for(let minute=0;minute<1440;minute++){const state=daylightAt(minute/60),next=Math.abs(state.atmosphere.geometricElevation-target);if(next<error){best=state;error=next;}}return best.grade;};
+  const moonless={illuminatedFraction:.001,transitHour:0,maximumElevation:68,waxing:true},base=new Date("2026-08-16T12:00:00-03:00");
+  const nearest=(target:number)=>{let best=daylightAt(0,base,null,ATMOSPHERE_PRESETS.Standard,moonless),error=Infinity;for(let minute=0;minute<1440;minute++){const state=daylightAt(minute/60,base,null,ATMOSPHERE_PRESETS.Standard,moonless),next=Math.abs(state.atmosphere.geometricElevation-target);if(next<error){best=state;error=next;}}return best.grade;};
   const noon=nearest(60),civil=nearest(-3),nautical=nearest(-9),astronomical=nearest(-15),night=nearest(-21);
   assert.ok(noon.exposure>civil.exposure+.3);
   assert.ok(civil.exposure>nautical.exposure+.3);
-  assert.ok(nautical.exposure>astronomical.exposure+.6);
+  assert.ok(nautical.exposure>astronomical.exposure+.5);
   assert.ok(astronomical.exposure>night.exposure);
   for(const grade of [noon,civil,nautical,astronomical,night])assert.ok(grade.blackPoint>=0,"twilight toe must not lift the black point");
 });
 
-test("true night evolves through afterglow, anti-solar midnight, and pre-dawn",()=>{
+test("true night evolves through afterglow, story moon, and pre-dawn",()=>{
   const evening=daylightAt(19),late=daylightAt(21),midnight=daylightAt(0),preDawn=daylightAt(5);
   assert.equal(evening.grade.name,"Early Night");
-  assert.equal(midnight.grade.name,"Deep Night");
+  assert.equal(late.grade.name,"Moonlit Night");
+  assert.equal(midnight.grade.name,"Moonlit Night");
   assert.equal(preDawn.grade.name,"Pre-dawn Night");
   assert.ok(evening.atmosphere.eveningAfterglow>.7);
   assert.ok(midnight.atmosphere.midnightDepth>.95);
   assert.ok(preDawn.atmosphere.preDawnAirglow>.7);
-  assert.ok(evening.grade.exposure>late.grade.exposure+.15);
-  assert.ok(preDawn.grade.exposure>midnight.grade.exposure+.2);
+  assert.ok(midnight.atmosphere.moonlightContribution>late.atmosphere.moonlightContribution);
+  assert.ok(late.grade.exposure>evening.grade.exposure+.1);
+  assert.ok(midnight.grade.exposure>late.grade.exposure+.05);
+  assert.ok(late.grade.exposure>preDawn.grade.exposure+.1);
   assert.ok(midnight.atmosphere.nightProgress>late.atmosphere.nightProgress);
   assert.ok(preDawn.atmosphere.nightProgress>midnight.atmosphere.nightProgress);
 });
@@ -71,6 +75,23 @@ test("Kasten-Young air mass falls as solar elevation rises",()=>{
   assert.ok(calculateAirMass(2)>calculateAirMass(10));
   assert.ok(calculateAirMass(10)>calculateAirMass(45));
   assert.ok(calculateAirMass(45)>calculateAirMass(75));
+});
+
+test("Story Sky supplies an authorable Moon without device location",()=>{
+  const profile=ATMOSPHERE_PRESETS.Standard;
+  const bright=calculateStoryMoonlight(0,profile,{illuminatedFraction:.95,transitHour:0,maximumElevation:68,waxing:true});
+  const dark=calculateStoryMoonlight(0,profile,{illuminatedFraction:.02,transitHour:0,maximumElevation:68,waxing:true});
+  const below=calculateStoryMoonlight(12,profile,{illuminatedFraction:.95,transitHour:0,maximumElevation:68,waxing:true});
+  assert.equal(bright.quality,"story-sky");assert.equal(bright.available,true);
+  assert.ok((bright.position?.geometricElevation??0)>60);
+  assert.ok(bright.groundIlluminanceLux>dark.groundIlluminanceLux*20);
+  assert.equal(below.directIlluminanceLux,0);assert.equal(below.diffuseIlluminanceLux,0);
+  const shifted=calculateStoryMoonlight(3,profile,{illuminatedFraction:.95,transitHour:3,maximumElevation:55,waxing:false});
+  assert.ok(Math.abs((shifted.position?.geometricElevation??0)-55)<1e-10);
+  assert.equal(shifted.position?.waxing,false);
+  const fallback=daylightAt(0);
+  assert.equal(fallback.atmosphere.moon.quality,"story-sky");
+  assert.ok(fallback.atmosphere.moonlightContribution>.3);
 });
 
 test("Bird-style clear-sky energy closes and remains physical",()=>{

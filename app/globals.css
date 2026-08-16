@@ -62,6 +62,8 @@ input[type="range"]::-webkit-slider-thumb { appearance: none; width: 14px; heigh
 .ticks { margin-top: 5px; display: flex; justify-content: space-between; color: #5e6163; font: 8px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .mode-row { margin-top: 13px; display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
 .mode-row .chip { cursor: pointer; }
+.story-controls .mode-row { margin-top: 0; }
+.story-control-head { margin-top: 14px; margin-bottom: 5px; }
 .play-row { margin-top: 7px; display: grid; grid-template-columns: 1fr 76px; gap: 7px; }
 .play-row .chip { cursor: pointer; }
 .play-row select { min-width: 0; color: #c9c7c1; background: #161718; border: 1px solid var(--line); border-radius: 8px; padding: 0 7px; font-size: 10px; }

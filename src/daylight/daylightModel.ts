@@ -2,7 +2,7 @@ import { calculateAtmosphereState, type AtmosphereState } from "./atmosphereMode
 import { calculateDaylightGrade, type DaylightGrade } from "./artDirection";
 import { STANDARD_ATMOSPHERE,type AtmosphereProfile } from "./clearSkyModel";
 import { calculateFallbackSolarPosition, calculateSolarPosition, type GeoLocation } from "./solarPosition";
-import { calculateMoonlight,UNAVAILABLE_MOONLIGHT } from "./moonlightModel";
+import { calculateMoonlight,calculateStoryMoonlight,DEFAULT_STORY_MOON,type StoryMoonConfig } from "./moonlightModel";
 
 export interface DaylightModel { grade:DaylightGrade; atmosphere:AtmosphereState }
 export const localClockHours=(d=new Date())=>d.getHours()+d.getMinutes()/60+d.getSeconds()/3600;
@@ -11,10 +11,10 @@ export function dateAtHour(hour:number,base=new Date()){
   d.setHours(Math.floor(totalMs/3600000),Math.floor(totalMs/60000)%60,Math.floor(totalMs/1000)%60,Math.floor(totalMs)%1000);
   return d;
 }
-export function daylightAt(hour:number,base=new Date(),location:GeoLocation|null=null,profile:AtmosphereProfile=STANDARD_ATMOSPHERE):DaylightModel{
+export function daylightAt(hour:number,base=new Date(),location:GeoLocation|null=null,profile:AtmosphereProfile=STANDARD_ATMOSPHERE,storyMoon:StoryMoonConfig=DEFAULT_STORY_MOON):DaylightModel{
   const date=dateAtHour(hour,base);
   const solar=location?calculateSolarPosition(date,location):calculateFallbackSolarPosition(date);
-  const moon=location?calculateMoonlight(date,location,profile):UNAVAILABLE_MOONLIGHT;
+  const moon=location?calculateMoonlight(date,location,profile):calculateStoryMoonlight(hour,profile,storyMoon);
   const atmosphere=calculateAtmosphereState(solar,profile,moon);
   return {atmosphere,grade:calculateDaylightGrade(atmosphere,hour)};
 }

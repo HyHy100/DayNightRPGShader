@@ -9,7 +9,7 @@ const smootherstep=(a:number,b:number,x:number)=>{const t=clamp01((x-a)/(b-a));r
 
 export interface MoonlightState {
   available:boolean;
-  quality:"physical-clear-sky"|"unavailable-location";
+  quality:"physical-clear-sky"|"story-sky"|"unavailable-location";
   position:LunarPosition|null;
   topOfAtmosphereIlluminanceLux:number;
   groundIlluminanceLux:number;
@@ -20,6 +20,15 @@ export interface MoonlightState {
   normalizedIntensity:number;
   spectralIlluminant:SpectralIlluminant;
 }
+
+export interface StoryMoonConfig {
+  illuminatedFraction:number;
+  transitHour:number;
+  maximumElevation:number;
+  waxing:boolean;
+}
+
+export const DEFAULT_STORY_MOON:StoryMoonConfig={illuminatedFraction:.95,transitHour:0,maximumElevation:68,waxing:true};
 
 const neutralMoonIlluminant=()=>integrateSpectralIlluminant(w=>solarBlackbody(w)*(0.86+.18*(w-380)/400));
 
@@ -37,8 +46,7 @@ export function unavailableMoonlight():MoonlightState{
 
 export const UNAVAILABLE_MOONLIGHT=unavailableMoonlight();
 
-export function calculateMoonlight(date:Date,location:GeoLocation,profile:AtmosphereProfile):MoonlightState{
-  const position=calculateLunarPosition(date,location,profile.altitudeM);
+function calculateFromPosition(position:LunarPosition,profile:AtmosphereProfile,quality:MoonlightState["quality"]):MoonlightState{
   const alpha=Math.abs(position.phaseAngle);
   // Krisciunas–Schaefer lunar phase function, normalized to full Moon.
   const phaseBrightness=Math.pow(10,-.4*(.026*alpha+4e-9*alpha**4));
@@ -63,6 +71,28 @@ export function calculateMoonlight(date:Date,location:GeoLocation,profile:Atmosp
     const regolithReflectance=.86+.18*(wavelength-380)/400;
     return solarBlackbody(wavelength)*regolithReflectance*extinction;
   });
-  return {available:true,quality:"physical-clear-sky",position,topOfAtmosphereIlluminanceLux,groundIlluminanceLux,directIlluminanceLux,
+  return {available:true,quality,position,topOfAtmosphereIlluminanceLux,groundIlluminanceLux,directIlluminanceLux,
     diffuseIlluminanceLux,opticalAirMass,atmosphericTransmission,normalizedIntensity,spectralIlluminant};
+}
+
+export function calculateMoonlight(date:Date,location:GeoLocation,profile:AtmosphereProfile):MoonlightState{
+  return calculateFromPosition(calculateLunarPosition(date,location,profile.altitudeM),profile,"physical-clear-sky");
+}
+
+/**
+ * Location-free celestial rig for fictional scenes. It preserves a smooth,
+ * plausible rise/transit/set arc while exposing phase and timing as art controls.
+ * Values are intentionally identified as story-world estimates, not ephemerides.
+ */
+export function calculateStoryMoonlight(hour:number,profile:AtmosphereProfile,config:StoryMoonConfig=DEFAULT_STORY_MOON):MoonlightState{
+  const wrappedHour=((hour-config.transitHour+12)%24+24)%24-12;
+  const hourAngle=wrappedHour*15,maximumElevation=Math.max(20,Math.min(88,config.maximumElevation));
+  const geometricElevation=maximumElevation*Math.cos(hourAngle*RAD);
+  const elevation=geometricElevation+((geometricElevation>-1&&geometricElevation<10)?(.55*smootherstep(-1,1,geometricElevation)*(1-smootherstep(5,10,geometricElevation))):0);
+  const fraction=Math.max(.001,Math.min(.999,config.illuminatedFraction));
+  const phaseAngle=Math.acos(2*fraction-1)*180/Math.PI,halfMonth=29.530588853*.5;
+  const position:LunarPosition={elevation,geometricElevation,azimuth:((180+hourAngle)%360+360)%360,zenith:90-geometricElevation,
+    rightAscension:0,declination:0,distanceKm:384400,horizontalParallax:.9507,phaseAngle,illuminatedFraction:fraction,
+    elongation:180-phaseAngle,ageDays:config.waxing?halfMonth*(1-phaseAngle/180):halfMonth*(1+phaseAngle/180),waxing:config.waxing,aboveHorizon:elevation>0};
+  return calculateFromPosition(position,profile,"story-sky");
 }
