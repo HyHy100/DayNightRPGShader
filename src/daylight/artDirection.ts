@@ -7,6 +7,7 @@ export interface DaylightGrade {
   shadows:Vec3; midtones:Vec3; highlights:Vec3; blackPoint:number; highlightRolloff:number;
   clarity:number; filmStrength:number; bloomStrength:number; bloomThreshold:number;
   bloomKnee:number; halationStrength:number; glareStrength:number; moonGlowStrength:number;
+  emissivePreservation:number;
 }
 const clamp=(x:number,a=0,b=1)=>Math.max(a,Math.min(b,x));
 const mix=(a:number,b:number,t:number)=>a+(b-a)*t;
@@ -174,6 +175,11 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   const halationStrength=.014+.175*lowSun*(.60+.40*s.sunWarmth)+.055*storyGolden+.018*afternoonCharacter;
   const glareStrength=.008+.075*lowSun*(.55+.45*s.haze)+.042*storyGolden+.010*noonCrown;
   const moonGlowStrength=.65*storyMoonAdaptation;
+  // Fire, candles, and practical lamps are radiance sources, not surfaces lit
+  // by the modeled Sun. Preserve their encoded source contrast increasingly as
+  // ambient illumination falls; the shader still validates warm chroma and
+  // source luminance per pixel, so roofs and ordinary earth tones stay graded.
+  const emissivePreservation=clamp(.12*s.twilight+s.night*(.72+.22*s.deepNightDepth));
   const [name,description]=daylightPhase(s);
   return {hour,name,description,exposure,temperature,tint,contrast,saturation,vibrance,lift,gamma,gain,shadows,midtones,highlights,
     blackPoint:Math.max(0,.003+.010*s.night+.007*deepNightDensity-.003*s.scotopicAdaptation+.002*s.twilight-(.003+.008*storySky)*moonNightTone-.0015*storyGolden-.001*morningCharacter+.0012*afternoonCharacter),
@@ -181,5 +187,5 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
     clarity:.065*noon-.055*s.haze-.025*s.twilight+.012*moonNightTone+.020*noonCrown-.015*morningCharacter-.010*afternoonCharacter,
     filmStrength:.42+.20*lowSun+.18*s.twilight+.20*s.night+.08*deepNightDensity+.035*morningCharacter+.045*afternoonCharacter,
     bloomStrength:Math.max(.008,bloomStrength),bloomThreshold:clamp(bloomThreshold,.055,.58),
-    bloomKnee:clamp(bloomKnee,.065,.20),halationStrength:Math.max(0,halationStrength),glareStrength:Math.max(0,glareStrength),moonGlowStrength};
+    bloomKnee:clamp(bloomKnee,.065,.20),halationStrength:Math.max(0,halationStrength),glareStrength:Math.max(0,glareStrength),moonGlowStrength,emissivePreservation};
 }

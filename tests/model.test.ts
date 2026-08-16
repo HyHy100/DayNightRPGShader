@@ -49,12 +49,12 @@ test("video export samples every frame deterministically instead of wall-clock s
 
 test("the 24-hour physical model closes seamlessly",()=>{
   const a=daylightAt(0),b=daylightAt(24);
-  for(const key of ["exposure","temperature","tint","contrast","saturation","vibrance","blackPoint","highlightRolloff","clarity","filmStrength","bloomStrength","bloomThreshold","bloomKnee","halationStrength","glareStrength","moonGlowStrength"] as const) assert.ok(Math.abs(a.grade[key]-b.grade[key])<1e-10,key);
+  for(const key of ["exposure","temperature","tint","contrast","saturation","vibrance","blackPoint","highlightRolloff","clarity","filmStrength","bloomStrength","bloomThreshold","bloomKnee","halationStrength","glareStrength","moonGlowStrength","emissivePreservation"] as const) assert.ok(Math.abs(a.grade[key]-b.grade[key])<1e-10,key);
 });
 
 test("all grading derivatives remain bounded at minute resolution",()=>{
   let previous=daylightAt(0).grade;
-  const limits={exposure:.04,temperature:.04,contrast:.025,saturation:.025,highlightRolloff:.025,bloomStrength:.025,bloomThreshold:.025,bloomKnee:.025,halationStrength:.025,glareStrength:.025,moonGlowStrength:.025};
+  const limits={exposure:.04,temperature:.04,contrast:.025,saturation:.025,highlightRolloff:.025,bloomStrength:.025,bloomThreshold:.025,bloomKnee:.025,halationStrength:.025,glareStrength:.025,moonGlowStrength:.025,emissivePreservation:.025};
   for(let minute=1;minute<=1440;minute++){
     const current=daylightAt(minute/60).grade;
     for(const key of Object.keys(limits) as (keyof typeof limits)[]) assert.ok(Math.abs(current[key]-previous[key])<limits[key],`${key} discontinuity at minute ${minute}`);
@@ -210,6 +210,13 @@ test("night uses tonal blue separation instead of a flat global cast",()=>{
   assert.ok(Math.abs(night.highlights[2]-night.highlights[0])<.012,"night highlights should remain neutral/silver rather than blue");
   assert.ok(night.shadows[2]-night.shadows[0]>noon.shadows[2]-noon.shadows[0]+.018,"night separation must be distinct from neutral daylight");
   assert.ok(Math.abs(night.temperature)<.5,"artistic night must not rely on an extreme global white-balance shift");
+});
+
+test("night preserves encoded practical-light contrast without enabling fake daytime HDR",()=>{
+  const night=daylightAt(0).grade,twilight=daylightAt(19.25).grade,noon=daylightAt(12.25).grade;
+  assert.ok(night.emissivePreservation>.80,"deep night should retain fire and practical-light radiance");
+  assert.ok(twilight.emissivePreservation>noon.emissivePreservation+.04,"emissive preservation should emerge as ambient light fades");
+  assert.ok(noon.emissivePreservation<.01,"daylight should not receive a synthetic HDR treatment");
 });
 
 test("Story Sky solar timing comes from one coherent temperate geometry",()=>{

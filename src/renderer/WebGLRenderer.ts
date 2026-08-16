@@ -123,7 +123,8 @@ export class WebGLRenderer {
     gl.uniform3fv(s.uniform("uLift"), g.lift); gl.uniform3fv(s.uniform("uGamma"), g.gamma); gl.uniform3fv(s.uniform("uGain"), g.gain);
     gl.uniform3fv(s.uniform("uShadows"), g.shadows); gl.uniform3fv(s.uniform("uMidtones"), g.midtones); gl.uniform3fv(s.uniform("uHighlights"), g.highlights);
     gl.uniform1f(s.uniform("uBlackPoint"), g.blackPoint); gl.uniform1f(s.uniform("uHighlightRolloff"), g.highlightRolloff);
-    gl.uniform1f(s.uniform("uClarity"), g.clarity); gl.uniform1f(s.uniform("uFilmStrength"), g.filmStrength); this.draw();
+    gl.uniform1f(s.uniform("uClarity"), g.clarity); gl.uniform1f(s.uniform("uFilmStrength"), g.filmStrength);
+    gl.uniform1f(s.uniform("uEmissivePreservation"), g.emissivePreservation); this.draw();
   }
 
   setIntensity(value: number) { this.intensity = value; this.draw(); }
@@ -164,6 +165,7 @@ export class WebGLRenderer {
 
       this.bindTarget(scene,scene.width,scene.height); gl.clearColor(0,0,0,1); gl.clear(gl.COLOR_BUFFER_BIT); this.gradeShader.use();
       gl.uniform2f(this.gradeShader.uniform("uImageScale"),scale[0],scale[1]);
+      gl.uniform2f(this.gradeShader.uniform("uImageTexelSize"),1/this.imageWidth,1/this.imageHeight);
       gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D,this.imageTexture); gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D,this.lutTexture); gl.drawArrays(gl.TRIANGLES,0,6);
 
       this.post(this.brightShader,bright,scene,()=>{gl.uniform2f(this.brightShader.uniform("uTexelSize"),1/scene.width,1/scene.height);gl.uniform1f(this.brightShader.uniform("uThreshold"),this.grade!.bloomThreshold);gl.uniform1f(this.brightShader.uniform("uKnee"),this.grade!.bloomKnee);});

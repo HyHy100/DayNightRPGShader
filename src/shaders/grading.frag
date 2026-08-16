@@ -5,6 +5,7 @@ out vec4 fragColor;
 
 uniform sampler2D uImage;
 uniform sampler2D uFilmLut;
+uniform vec2 uImageTexelSize;
 uniform float uExposure;
 uniform float uTemperature;
 uniform float uTint;
@@ -21,6 +22,7 @@ uniform float uBlackPoint;
 uniform float uHighlightRolloff;
 uniform float uClarity;
 uniform float uFilmStrength;
+uniform float uEmissivePreservation;
 
 #include "colorScience.glsl"
 
@@ -43,7 +45,31 @@ vec3 sampleFilmLut(vec3 c) {
 }
 
 vec3 grade(vec3 source) {
-  vec3 c = srgbToLinear(source);
+  vec3 sourceLinear = srgbToLinear(source);
+  float sourceY = luminance(sourceLinear);
+  float sourceMax = max(max(sourceLinear.r, sourceLinear.g), sourceLinear.b);
+  float sourceMin = min(min(sourceLinear.r, sourceLinear.g), sourceLinear.b);
+  vec2 emissiveRadius = uImageTexelSize * 8.0;
+  float neighborhoodY = 0.25 * (
+    luminance(srgbToLinear(texture(uImage, vUv + vec2(emissiveRadius.x, 0.0)).rgb)) +
+    luminance(srgbToLinear(texture(uImage, vUv - vec2(emissiveRadius.x, 0.0)).rgb)) +
+    luminance(srgbToLinear(texture(uImage, vUv + vec2(0.0, emissiveRadius.y)).rgb)) +
+    luminance(srgbToLinear(texture(uImage, vUv - vec2(0.0, emissiveRadius.y)).rgb)));
+
+  // Detect encoded warm radiance before exposure and white-balance changes.
+  // Ratios matter more than absolute RGB here: a fire core has red at least as
+  // strong as green and almost no blue energy. This rejects warm masonry,
+  // foliage, and roofs that a broad orange detector would mistake for lights.
+  float sourceRange = max(sourceMax - sourceMin, 0.0);
+  float redLead = smoothstep(-0.005, 0.12, sourceLinear.r - sourceLinear.g);
+  float blueDeficit = smoothstep(0.55, 0.78,
+    (min(sourceLinear.r, sourceLinear.g) - sourceLinear.b) / max(sourceMax, 1e-4));
+  float emissiveChroma = smoothstep(0.42, 0.72, sourceRange / max(sourceMax, 1e-4));
+  float emissiveLuma = smoothstep(0.18, 0.48, sourceY);
+  float localRadiance = smoothstep(0.08, 0.40, sourceY - neighborhoodY);
+  float emissiveMask = redLead * blueDeficit * emissiveChroma * emissiveLuma * localRadiance;
+
+  vec3 c = sourceLinear;
   c *= exp2(uExposure);
   c = chromaticAdaptation(c, uTemperature, uTint);
 
@@ -64,6 +90,13 @@ vec3 grade(vec3 source) {
   float highlightW = smoothstep(0.42, 1.10, y);
   float midW = max(0.0, 1.0 - shadowW - highlightW);
   c += (uShadows * shadowW + uMidtones * midW + uHighlights * highlightW) * (0.16 + 0.55 * y);
+
+  // A practical light must not lose the same stops as reflected daylight.
+  // Restore only positive local radiance toward a modest scene-linear target;
+  // subsequent filmic compression, gamut protection, and bloom remain active.
+  vec3 emissiveTarget = sourceLinear * (1.12 + 0.62 * emissiveMask);
+  float emissiveBlend = emissiveMask * uEmissivePreservation;
+  c = mix(c, max(c, emissiveTarget), emissiveBlend);
 
   // Pivoted contrast in log2 exposure space, with a gentle clarity S-curve.
   vec3 logC = log2(max(c, vec3(1e-5)));
