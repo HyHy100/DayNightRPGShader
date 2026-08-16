@@ -18,6 +18,26 @@ npm run build
 npm start
 ```
 
+## GitHub Pages
+
+The live static build is published at:
+
+<https://hyhy100.github.io/DayNightRPGShader/>
+
+GitHub Actions builds and deploys the site after changes reach `main`. The Pages
+build is a dedicated browser-only Vite entry, so the existing Vinext development
+workflow remains unchanged. To verify that deployment locally:
+
+```bash
+npm run build:pages
+npx vite preview --config vite.pages.config.ts
+```
+
+The application is fully client-side on GitHub Pages. WebGL grading, local image
+selection, Story Sky, and WebM export remain local to the browser. Device Sky asks
+for browser geolocation permission; automatic access to the Downloads directory is
+still prohibited by browser security.
+
 ## Architecture
 
 ```text

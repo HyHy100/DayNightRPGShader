@@ -8,7 +8,9 @@ import type { GeoLocation } from "../daylight/solarPosition";
 import { DayCycleVideoExporter,type VideoComposition,type VideoExportProgress,type VideoResolution } from "../export/DayCycleVideoExporter";
 import { WebGLRenderer,type ComparisonMode } from "../renderer/WebGLRenderer";
 
-const DEFAULT_IMAGE="/latest-download.png";
+// Relative to the document so the bundled image works at both `/` locally and
+// the `/DayNightRPGShader/` GitHub Pages project path.
+const DEFAULT_IMAGE="./latest-download.png";
 const n=(v:number,d=2)=>Number.isFinite(v)?v.toFixed(d):"—";
 const localDateValue=(date=new Date())=>`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
 const parseLocalDate=(value:string)=>{const [y,m,d]=value.split("-").map(Number),parsed=new Date(y,m-1,d,12,0,0,0);if(Number.isFinite(parsed.getTime()))return parsed;const fallback=new Date();fallback.setHours(12,0,0,0);return fallback;};
