@@ -21,7 +21,7 @@ function cie1931(w:number):Vec3{
   return [Math.max(0,x),Math.max(0,y),Math.max(0,z)];
 }
 
-function solarBlackbody(wavelengthNm:number){
+export function solarBlackbody(wavelengthNm:number){
   const wavelength=wavelengthNm*1e-9,c2=1.438776877e-2,t=5778;
   return 1/(Math.pow(wavelength,5)*(Math.exp(c2/(wavelength*t))-1));
 }
@@ -41,6 +41,17 @@ function finishIlluminant(xyz:Vec3):SpectralIlluminant{
   const locusY=-3*xy[0]*xy[0]+2.87*xy[0]-.275;
   const tint=clamp((xy[1]-locusY)*8,-.25,.25);
   return {xyz:normalized,xy,cct,tint,linearRgb:xyzToRgb(normalized)};
+}
+
+/** Integrate a sampled spectral power distribution through the CIE 1931 observer. */
+export function integrateSpectralIlluminant(sample:(wavelengthNm:number)=>number):SpectralIlluminant{
+  let x=0,y=0,z=0;
+  for(let wavelength=380;wavelength<=780;wavelength+=10){
+    const power=Math.max(0,sample(wavelength));
+    const [cx,cy,cz]=cie1931(wavelength);
+    x+=power*cx;y+=power*cy;z+=power*cz;
+  }
+  return finishIlluminant([x,y,z]);
 }
 
 export function calculateSpectralIlluminants(

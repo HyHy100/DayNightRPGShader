@@ -17,6 +17,7 @@ export function daylightPhase(s:AtmosphereState){
   if(e<-18){
     if(s.eveningAfterglow>.12)return ["Early Night","Residual upper-atmosphere glow fading into night"] as const;
     if(s.preDawnAirglow>.12)return ["Pre-dawn Night","Airglow strengthening before astronomical dawn"] as const;
+    if(s.moonlightContribution>.06)return ["Moonlit Night",`${Math.round((s.moon.position?.illuminatedFraction??0)*100)}% Moon · clear-sky adapted illumination`] as const;
     if(s.midnightDepth>.72)return ["Deep Night","Maximum solar depression · fully adapted nocturnal vision"] as const;
     return ["Night","Dark solar hemisphere · restrained airglow"] as const;
   }
@@ -41,34 +42,37 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   const morningFreshness=(1-s.evening)*smootherstep(0,12,elevation)*(1-smootherstep(28,48,elevation));
   const eveningBias=s.evening*(.25+.75*lowSun);
   const deepNightDensity=s.night*(.60*s.deepNightDepth+.40*s.midnightDepth);
+  const moon=s.moonlightContribution;
   // A broad C2 ramp makes exposure strictly follow solar depression without
   // the derivative peaks produced by stacked twilight "mode" curves.
   const solarDarkening=1-smootherstep(-30,15,elevation);
   const sunColor=mixOklab([1,.985,.95],s.sunIlluminant.linearRgb,clamp(.30+.55*s.sunWarmth));
   const skyColor=mixOklab([.93,.97,1],s.skyIlluminant.linearRgb,clamp(.22+.48*s.skyCoolness));
+  const moonColor=mixOklab([.94,.97,1],s.moon.spectralIlluminant.linearRgb,.20);
   const sunOffset=rgbOffset(sunColor,.20+.16*lowSun);
   const skyOffset=rgbOffset(skyColor,.14+.18*(s.rayleigh+s.twilight));
+  const moonOffset=rgbOffset(moonColor,.12);
   const warmSeparation=lowSun*(.26+.13*eveningBias)*(.65+.35*s.spectralSeparation)+afternoonWarmth*.10;
   const coolSeparation=clamp(s.skyCoolness*(.26+.35*(1-noon))+.20*lowSun*(.55+.45*s.spectralSeparation)+.07*morningFreshness+.06*s.eveningAfterglow+.08*s.preDawnAirglow-.05*deepNightDensity);
   const exposure=-.04+.14*noon-.12*(1-noon)*daylight-.08*s.haze*skyIllumination-.03*afternoon
     -3.0*solarDarkening-.20*deepNightDensity
-    +.05*s.eveningAfterglow+.04*s.preDawnAirglow+.025*s.scotopicAdaptation;
-  const temperature=s.sunWarmth*(.40+.16*eveningBias)-s.skyCoolness*.12*s.twilight-s.night*.25-.07*deepNightDensity-.04*s.preDawnAirglow+afternoonWarmth*.11-morningFreshness*.025;
+    +.05*s.eveningAfterglow+.04*s.preDawnAirglow+.025*s.scotopicAdaptation+.45*Math.sqrt(moon);
+  const temperature=s.sunWarmth*(.40+.16*eveningBias)-s.skyCoolness*.12*s.twilight-s.night*.25-.07*deepNightDensity-.04*s.preDawnAirglow+afternoonWarmth*.11-morningFreshness*.025-.018*moon;
   const tint=clamp(s.sunIlluminant.tint*.08+s.skyIlluminant.tint*.04,-.04,.04)+eveningBias*lowSun*.024;
   const contrast=.025+.070*noon-.13*s.haze*skyIllumination-.05*s.twilight-.025*s.night-.018*afternoonWarmth;
   const saturation=.015+.055*(1-noon)*daylight+.025*lowSun+.018*afternoonWarmth-.14*s.twilight-.22*s.night-.07*deepNightDensity+.035*s.eveningAfterglow+.025*s.preDawnAirglow;
   const vibrance=.025+.050*daylight*(1-s.haze)-.09*s.night;
-  const shadows:Vec3=[skyOffset[0]*coolSeparation,skyOffset[1]*coolSeparation,skyOffset[2]*coolSeparation];
+  const shadows:Vec3=[skyOffset[0]*coolSeparation+moonOffset[0]*moon*.18,skyOffset[1]*coolSeparation+moonOffset[1]*moon*.18,skyOffset[2]*coolSeparation+moonOffset[2]*moon*.18];
   const highlights:Vec3=[sunOffset[0]*warmSeparation,sunOffset[1]*warmSeparation,sunOffset[2]*warmSeparation];
   const midtones:Vec3=[highlights[0]*.45+shadows[0]*.22,highlights[1]*.45+shadows[1]*.22,highlights[2]*.45+shadows[2]*.22];
-  const nightLift=-.007*s.night-.003*deepNightDensity+.002*s.scotopicAdaptation+.001*s.twilight;
-  const lift:Vec3=[nightLift-s.night*.003,nightLift,nightLift+s.night*.004+s.twilight*.001];
-  const gamma:Vec3=[1-.030*s.night+.006*s.haze,1-.014*s.night+.006*s.haze,1+.009*s.night+.003*s.twilight];
-  const gain:Vec3=[1-.055*s.night+highlights[0]*.22,1-.025*s.night+highlights[1]*.22,1+.010*s.night+highlights[2]*.22];
+  const nightLift=-.007*s.night-.003*deepNightDensity+.002*s.scotopicAdaptation+.001*s.twilight+.003*moon;
+  const lift:Vec3=[nightLift-s.night*.003,nightLift,nightLift+s.night*.004+s.twilight*.001+moon*.001];
+  const gamma:Vec3=[1-.030*s.night+.006*s.haze+moon*.003,1-.014*s.night+.006*s.haze+moon*.004,1+.009*s.night+.003*s.twilight+moon*.004];
+  const gain:Vec3=[1-.055*s.night+highlights[0]*.22+moon*.004,1-.025*s.night+highlights[1]*.22+moon*.006,1+.010*s.night+highlights[2]*.22+moon*.007];
   const [name,description]=daylightPhase(s);
   return {hour,name,description,exposure,temperature,tint,contrast,saturation,vibrance,lift,gamma,gain,shadows,midtones,highlights,
-    blackPoint:.003+.010*s.night+.007*deepNightDensity-.003*s.scotopicAdaptation+.002*s.twilight,
+    blackPoint:.003+.010*s.night+.007*deepNightDensity-.003*s.scotopicAdaptation+.002*s.twilight-.003*moon,
     highlightRolloff:.28+.25*noon+.20*lowSun+.16*s.twilight+.14*s.night,
-    clarity:.065*noon-.055*s.haze-.025*s.twilight,
+    clarity:.065*noon-.055*s.haze-.025*s.twilight+.012*moon,
     filmStrength:.42+.20*lowSun+.18*s.twilight+.20*s.night+.08*deepNightDensity};
 }

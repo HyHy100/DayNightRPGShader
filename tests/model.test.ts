@@ -3,6 +3,8 @@ import test from "node:test";
 import { calculateAirMass } from "../src/daylight/atmosphereModel";
 import { ATMOSPHERE_PRESETS,calculateClearSkyIrradiance } from "../src/daylight/clearSkyModel";
 import { daylightAt } from "../src/daylight/daylightModel";
+import { calculateLunarPosition } from "../src/daylight/lunarPosition";
+import { calculateMoonlight,UNAVAILABLE_MOONLIGHT } from "../src/daylight/moonlightModel";
 import { calculateSolarPosition } from "../src/daylight/solarPosition";
 
 test("the 24-hour physical model closes seamlessly",()=>{
@@ -119,4 +121,67 @@ test("astronomical solar position returns finite seasonal geometry",()=>{
   const polarNight=calculateSolarPosition(new Date("2026-12-21T12:00:00Z"),{lat:75,lon:0});
   assert.equal(polarDay.events.polarState,"polar-day");assert.equal(polarDay.events.sunrise,null);
   assert.equal(polarNight.events.polarState,"polar-night");assert.equal(polarNight.events.sunset,null);
+});
+
+test("lunar ephemeris agrees with USNO navigation fixtures",()=>{
+  const date=new Date("2026-08-16T21:00:00Z");
+  const fixtures=[
+    {location:{lat:-23.55,lon:-46.63},elevation:49.96,azimuth:283.46},
+    {location:{lat:0,lon:0},elevation:3.69,azimuth:259.79},
+    {location:{lat:40,lon:-74},elevation:38.54,azimuth:195.49},
+  ];
+  for(const fixture of fixtures){
+    const moon=calculateLunarPosition(date,fixture.location);
+    // USNO hc is geocentric; our observer-centered altitude includes parallax.
+    // The one-degree allowance covers that distinction close to the horizon.
+    assert.ok(Math.abs(moon.elevation-fixture.elevation)<1.05,`Moon elevation at ${fixture.location.lat},${fixture.location.lon}`);
+    assert.ok(Math.abs(moon.azimuth-fixture.azimuth)<.7,`Moon azimuth at ${fixture.location.lat},${fixture.location.lon}`);
+    assert.ok(Math.abs(moon.illuminatedFraction-.20)<.01);
+  }
+  const polar=calculateLunarPosition(date,{lat:70,lon:0});
+  for(const value of [polar.elevation,polar.azimuth,polar.distanceKm,polar.phaseAngle,polar.illuminatedFraction])assert.ok(Number.isFinite(value));
+});
+
+test("moonlight is physical, phase ordered, and horizon gated",()=>{
+  const location={lat:-23.55,lon:-46.63},profile=ATMOSPHERE_PRESETS.Standard;
+  const newMoon=calculateMoonlight(new Date("2026-08-12T03:00:00Z"),location,profile);
+  const crescent=calculateMoonlight(new Date("2026-08-16T03:00:00Z"),location,profile);
+  const quarter=calculateMoonlight(new Date("2026-08-20T03:00:00Z"),location,profile);
+  const fullMoon=calculateMoonlight(new Date("2026-08-28T03:00:00Z"),location,profile);
+  assert.ok(fullMoon.topOfAtmosphereIlluminanceLux>quarter.topOfAtmosphereIlluminanceLux);
+  assert.ok(quarter.topOfAtmosphereIlluminanceLux>crescent.topOfAtmosphereIlluminanceLux);
+  assert.ok(crescent.topOfAtmosphereIlluminanceLux>newMoon.topOfAtmosphereIlluminanceLux);
+  for(const state of [newMoon,crescent,quarter,fullMoon])for(const value of [state.groundIlluminanceLux,state.atmosphericTransmission,state.normalizedIntensity,...state.spectralIlluminant.xyz])assert.ok(Number.isFinite(value)&&value>=0);
+  let below=fullMoon;
+  for(let hour=0;hour<24;hour++){const state=calculateMoonlight(new Date(`2026-08-28T${String(hour).padStart(2,"0")}:00:00Z`),location,profile);if((state.position?.geometricElevation??0)<-.5){below=state;break;}}
+  assert.equal(below.directIlluminanceLux,0);assert.equal(below.diffuseIlluminanceLux,0);
+  assert.equal(UNAVAILABLE_MOONLIGHT.available,false);assert.equal(UNAVAILABLE_MOONLIGHT.normalizedIntensity,0);
+});
+
+test("haze increases lunar extinction and the grade stays restrained",()=>{
+  const location={lat:-23.55,lon:-46.63},date=new Date("2026-08-28T03:00:00Z");
+  const clean=calculateMoonlight(date,location,ATMOSPHERE_PRESETS.Clean),hazy=calculateMoonlight(date,location,ATMOSPHERE_PRESETS.Hazy);
+  if((clean.position?.geometricElevation??0)>0){
+    assert.ok(clean.atmosphericTransmission>hazy.atmosphericTransmission);
+    assert.ok(clean.directIlluminanceLux>hazy.directIlluminanceLux);
+  }
+  const located=daylightAt(0,new Date("2026-08-28T12:00:00-03:00"),location);
+  assert.ok(located.atmosphere.moonlightContribution>=0&&located.atmosphere.moonlightContribution<=1);
+  assert.ok(located.grade.exposure<-.5,"moonlit night remains far below daylight exposure");
+  assert.ok(Math.abs(located.grade.temperature)<.5,"moonlight does not create a global blue cast");
+});
+
+test("lunar motion and grading remain continuous across chronological midnight",()=>{
+  const location={lat:-23.55,lon:-46.63},start=new Date("2026-08-27T23:58:00-03:00");
+  let previous=calculateMoonlight(start,location,ATMOSPHERE_PRESETS.Standard);
+  let previousGrade=daylightAt(23+58/60,start,location).grade;
+  for(let seconds=10;seconds<=240;seconds+=10){
+    const date=new Date(start.getTime()+seconds*1000),current=calculateMoonlight(date,location,ATMOSPHERE_PRESETS.Standard);
+    assert.ok(Math.abs((current.position?.elevation??0)-(previous.position?.elevation??0))<.08,"Moon elevation derivative spike");
+    assert.ok(Math.abs(current.groundIlluminanceLux-previous.groundIlluminanceLux)<.01,"moonlight derivative spike");
+    const hour=date.getHours()+date.getMinutes()/60+date.getSeconds()/3600,currentGrade=daylightAt(hour,date,location).grade;
+    assert.ok(Math.abs(currentGrade.exposure-previousGrade.exposure)<.02,"midnight exposure jump");
+    assert.ok(Math.abs(currentGrade.temperature-previousGrade.temperature)<.02,"midnight temperature jump");
+    previous=current;previousGrade=currentGrade;
+  }
 });

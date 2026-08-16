@@ -2,6 +2,7 @@ import { calculateAtmosphereState, type AtmosphereState } from "./atmosphereMode
 import { calculateDaylightGrade, type DaylightGrade } from "./artDirection";
 import { STANDARD_ATMOSPHERE,type AtmosphereProfile } from "./clearSkyModel";
 import { calculateFallbackSolarPosition, calculateSolarPosition, type GeoLocation } from "./solarPosition";
+import { calculateMoonlight,UNAVAILABLE_MOONLIGHT } from "./moonlightModel";
 
 export interface DaylightModel { grade:DaylightGrade; atmosphere:AtmosphereState }
 export const localClockHours=(d=new Date())=>d.getHours()+d.getMinutes()/60+d.getSeconds()/3600;
@@ -13,7 +14,8 @@ export function dateAtHour(hour:number,base=new Date()){
 export function daylightAt(hour:number,base=new Date(),location:GeoLocation|null=null,profile:AtmosphereProfile=STANDARD_ATMOSPHERE):DaylightModel{
   const date=dateAtHour(hour,base);
   const solar=location?calculateSolarPosition(date,location):calculateFallbackSolarPosition(date);
-  const atmosphere=calculateAtmosphereState(solar,profile);
+  const moon=location?calculateMoonlight(date,location,profile):UNAVAILABLE_MOONLIGHT;
+  const atmosphere=calculateAtmosphereState(solar,profile,moon);
   return {atmosphere,grade:calculateDaylightGrade(atmosphere,hour)};
 }
 export const formatTime=(hour:number)=>{const t=Math.round((((hour%24)+24)%24)*60)%1440;return `${String(Math.floor(t/60)).padStart(2,"0")}:${String(t%60).padStart(2,"0")}`;};

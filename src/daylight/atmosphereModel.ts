@@ -1,5 +1,6 @@
 import { calculateClearSkyIrradiance,STANDARD_ATMOSPHERE,type AtmosphereProfile,type ClearSkyIrradiance } from "./clearSkyModel";
 import { calculateSpectralIlluminants,type SpectralIlluminant } from "./spectralModel";
+import { UNAVAILABLE_MOONLIGHT,type MoonlightState } from "./moonlightModel";
 import type { SolarPosition } from "./solarPosition";
 
 const clamp01=(x:number)=>Math.max(0,Math.min(1,x));
@@ -11,11 +12,13 @@ export interface PhysicalDaylightState extends SolarPosition {
   irradiance:ClearSkyIrradiance;
   sunIlluminant:SpectralIlluminant;
   skyIlluminant:SpectralIlluminant;
+  moon:MoonlightState;
   solarDepression:number; airMass:number; sunIntensity:number; skyIrradiance:number; directDiffuseRatio:number;
   sunCCT:number; skyCCT:number; sunWarmth:number; skyCoolness:number; rayleigh:number;
   mie:number; haze:number; lowSunFactor:number; spectralSeparation:number; twilight:number; night:number;
   deepNightDepth:number; nightProgress:number; midnightDepth:number; eveningAfterglow:number;
   preDawnAirglow:number; scotopicAdaptation:number; dayProgress:number; evening:number;
+  moonlightContribution:number;
 }
 export type AtmosphereState=PhysicalDaylightState;
 
@@ -25,7 +28,7 @@ export function calculateAirMass(elevation:number){
   return 1/(Math.cos(z*Math.PI/180)+.50572*Math.pow(96.07995-z,-1.6364));
 }
 
-export function calculateAtmosphereState(solar:SolarPosition,profile:AtmosphereProfile=STANDARD_ATMOSPHERE):AtmosphereState{
+export function calculateAtmosphereState(solar:SolarPosition,profile:AtmosphereProfile=STANDARD_ATMOSPHERE,moon:MoonlightState=UNAVAILABLE_MOONLIGHT):AtmosphereState{
   const e=solar.geometricElevation;
   const irradiance=calculateClearSkyIrradiance(e,solar.earthSunDistanceAU,profile);
   const {sun:sunIlluminant,sky:skyIlluminant}=calculateSpectralIlluminants(e,irradiance,profile);
@@ -57,14 +60,15 @@ export function calculateAtmosphereState(solar:SolarPosition,profile:AtmosphereP
   const eveningAfterglow=(solar.hourAngle>=0?1:0)*night*(1-smootherstep(18,42,solarDepression));
   const preDawnAirglow=(solar.hourAngle<0?1:0)*night*(1-smootherstep(18,42,solarDepression));
   const scotopicAdaptation=night*smootherstep(.08,.55,nightProgress);
+  const moonlightContribution=moon.available?moon.normalizedIntensity*(1-smootherstep(-12,-6,e)):0;
   const {sunrise,sunset,solarNoon,polarState}=solar.events,clock=solar.solarTime;
   let dayProgress=.5+.5*Math.sin(solar.hourAngle*Math.PI/180);
   if(polarState==="normal"&&sunrise!==null&&sunset!==null){
     dayProgress=clock<=solarNoon?.5*(clock-sunrise)/Math.max(.1,solarNoon-sunrise):.5+.5*(clock-solarNoon)/Math.max(.1,sunset-solarNoon);
   }
   const evening=solar.hourAngle>=0?1:0;
-  return {...solar,quality:solar.located?"physical-clear-sky":"qualitative-reference",profile,irradiance,sunIlluminant,skyIlluminant,solarDepression,
+  return {...solar,quality:solar.located?"physical-clear-sky":"qualitative-reference",profile,irradiance,sunIlluminant,skyIlluminant,moon,solarDepression,
     airMass:irradiance.opticalAirMass,sunIntensity,skyIrradiance,directDiffuseRatio,sunCCT:sunIlluminant.cct,skyCCT:skyIlluminant.cct,
     sunWarmth,skyCoolness,rayleigh,mie,haze,lowSunFactor,spectralSeparation,twilight,night,deepNightDepth,nightProgress,midnightDepth,
-    eveningAfterglow,preDawnAirglow,scotopicAdaptation,dayProgress:clamp01(dayProgress),evening};
+    eveningAfterglow,preDawnAirglow,scotopicAdaptation,moonlightContribution,dayProgress:clamp01(dayProgress),evening};
 }

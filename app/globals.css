@@ -65,17 +65,21 @@ input[type="range"]::-webkit-slider-thumb { appearance: none; width: 14px; heigh
 .play-row { margin-top: 7px; display: grid; grid-template-columns: 1fr 76px; gap: 7px; }
 .play-row .chip { cursor: pointer; }
 .play-row select { min-width: 0; color: #c9c7c1; background: #161718; border: 1px solid var(--line); border-radius: 8px; padding: 0 7px; font-size: 10px; }
+.date-row { margin-top: 11px; display: grid; grid-template-columns: minmax(0, 1fr) 70px; gap: 7px; }
+.date-row input { min-width: 0; color: #c9c7c1; color-scheme: dark; background: #161718; border: 1px solid var(--line); border-radius: 8px; padding: 0 8px; font-size: 10px; }
 .hint { margin-top: 9px; color: #66696a; font-size: 9px; line-height: 1.5; }
 .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 8px; }
 .stat-label { color: #626566; font-size: 8px; letter-spacing: .12em; text-transform: uppercase; }
 .stat-value { margin-top: 4px; color: #c9c8c4; font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .physics-panel { background: #0d0f11; }
-.day-curve { width: 100%; height: 174px; display: block; margin: 4px 0 7px; border: 1px solid #ffffff0b; border-radius: 6px; background: #090a0b; }
-.curve-legend { display: flex; gap: 12px; margin-bottom: 14px; color: #686b6d; font-size: 8px; }
+.day-curve { width: 100%; height: 238px; display: block; margin: 4px 0 7px; border: 1px solid #ffffff0b; border-radius: 6px; background: #090a0b; }
+.curve-legend { display: flex; flex-wrap: wrap; gap: 7px 11px; margin-bottom: 14px; color: #686b6d; font-size: 8px; }
 .curve-legend span::before { content: ""; display: inline-block; width: 5px; height: 5px; border-radius: 50%; margin-right: 5px; background: #e8b562; }
-.curve-legend span:nth-child(2)::before { background: #d86f4a; }
-.curve-legend span:nth-child(3)::before { background: #6f9fd0; }
-.curve-legend span:nth-child(4)::before { background: #e7ddd0; }
+.curve-legend span:nth-child(2)::before { background: #b8c8de; }
+.curve-legend span:nth-child(3)::before { background: #d86f4a; }
+.curve-legend span:nth-child(4)::before { background: #6f9fd0; }
+.curve-legend span:nth-child(5)::before { background: #e7ddd0; }
+.curve-legend span:nth-child(6)::before { background: #c7d5e8; }
 .metric-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 7px 0; border-top: 1px solid #ffffff08; }
 .atmosphere-controls select { width: 100%; margin-top: 4px; color: #c9c7c1; background: #161718; border: 1px solid var(--line); border-radius: 8px; padding: 8px; font-size: 10px; }
 .atmosphere-controls details { margin-top: 10px; }
