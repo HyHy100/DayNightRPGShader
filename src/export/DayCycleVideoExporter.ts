@@ -1,6 +1,7 @@
 import { daylightAt,formatTime } from "../daylight/daylightModel";
 import { WebGLRenderer } from "../renderer/WebGLRenderer";
-import { chooseWebMMimeType,exportFilename,getExportDimensions,sampleDayCycleTimeline,type VideoExportOptions,type VideoExportStage } from "./videoExportModel";
+import { chooseWebMMimeType,exportFilename,exportFrameCount,exportFrameProgress,getExportDimensions,sampleDayCycleTimeline,type VideoExportOptions,type VideoExportStage } from "./videoExportModel";
+import { fixWebmDuration } from "./fixWebmDuration";
 export type { VideoComposition,VideoExportOptions,VideoExportProgress,VideoResolution } from "./videoExportModel";
 
 function roundedRect(context:CanvasRenderingContext2D,x:number,y:number,width:number,height:number,radius:number){
@@ -8,13 +9,14 @@ function roundedRect(context:CanvasRenderingContext2D,x:number,y:number,width:nu
 }
 
 function drawOverlay(context:CanvasRenderingContext2D,width:number,height:number,time:string,name:string,comparison:boolean){
-  const scale=height/1080,cx=width/2,cy=height/2;
+  const scale=height/1080,cx=width/2;
   context.save();context.textAlign="center";context.textBaseline="middle";
   context.font=`600 ${Math.round(18*scale)}px ui-monospace, SFMono-Regular, Menlo, monospace`;
   const timeWidth=context.measureText(time).width;
   context.font=`${Math.round(46*scale)}px Georgia, "Times New Roman", serif`;
   const nameWidth=context.measureText(name).width,boxWidth=Math.max(nameWidth,timeWidth)+72*scale,boxHeight=116*scale;
-  context.fillStyle="rgba(5, 6, 7, .48)";roundedRect(context,cx-boxWidth/2,cy-boxHeight/2,boxWidth,boxHeight,12*scale);
+  const boxTop=38*scale,cy=boxTop+boxHeight/2;
+  context.fillStyle="rgba(5, 6, 7, .48)";roundedRect(context,cx-boxWidth/2,boxTop,boxWidth,boxHeight,12*scale);
   context.shadowColor="rgba(0,0,0,.9)";context.shadowBlur=18*scale;context.fillStyle="#f2eee5";
   context.fillText(name,cx,cy+15*scale);
   context.shadowBlur=10*scale;context.font=`600 ${Math.round(18*scale)}px ui-monospace, SFMono-Regular, Menlo, monospace`;context.fillStyle="#e9b866";
@@ -34,10 +36,10 @@ function drawOverlay(context:CanvasRenderingContext2D,width:number,height:number
 export class DayCycleVideoExporter {
   private cancelled=false;
   private recorder:MediaRecorder|null=null;
-  private animationFrame=0;
   private stream:MediaStream|null=null;
-  private resolveLoop:(()=>void)|null=null;
-  cancel(){this.cancelled=true;if(this.animationFrame)cancelAnimationFrame(this.animationFrame);this.resolveLoop?.();if(this.recorder?.state!=="inactive")this.recorder?.stop();}
+  private timer=0;
+  private resolveWait:(()=>void)|null=null;
+  cancel(){this.cancelled=true;if(this.timer)clearTimeout(this.timer);this.resolveWait?.();}
 
   async export(options:VideoExportOptions){
     this.cancelled=false;
@@ -59,7 +61,16 @@ export class DayCycleVideoExporter {
         renderer!.setGrade(model.grade);renderer!.renderFrame();context.drawImage(renderCanvas,0,0,width,height);
         drawOverlay(context,width,height,formatTime(sample.hour),model.grade.name,options.composition==="comparison");
       };
-      renderAt(0);this.stream=outputCanvas.captureStream(options.frameRate);
+      renderAt(0);
+      // A zero-rate capture track lets each deterministic timeline sample be
+      // submitted explicitly. This prevents slow 1080p GPU/encoder frames from
+      // making wall-clock progress skip short twilight stages. Older browsers
+      // fall back to a normal fixed-rate capture stream; the render loop still
+      // advances by frame index, never by elapsed time.
+      this.stream=outputCanvas.captureStream(0);
+      let captureTrack=this.stream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack|undefined;
+      const manualCapture=typeof captureTrack?.requestFrame==="function";
+      if(!manualCapture){this.stream.getTracks().forEach(track=>track.stop());this.stream=outputCanvas.captureStream(options.frameRate);captureTrack=this.stream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack|undefined;}
       const chunks:BlobPart[]=[];this.recorder=new MediaRecorder(this.stream,{mimeType,videoBitsPerSecond:options.resolution==="1080p"?12_000_000:7_000_000});
       const stopped=new Promise<Blob>((resolve,reject)=>{
         this.recorder.ondataavailable=event=>{if(event.data.size)chunks.push(event.data);};
@@ -67,29 +78,44 @@ export class DayCycleVideoExporter {
         this.recorder.onstop=()=>resolve(new Blob(chunks,{type:mimeType}));
       });
       this.recorder.start(1000);report("recording",0,"Recording midnight → midnight…");
-      const started=performance.now(),frameInterval=1000/options.frameRate;
-      await new Promise<void>(resolve=>{
-        this.resolveLoop=resolve;
-        let nextFrame=0;
-        const tick=(now:number)=>{
-          if(this.cancelled){resolve();return;}
-          const elapsed=now-started,progress=Math.min(1,elapsed/(options.durationSeconds*1000));
-          if(elapsed>=nextFrame||progress===1){renderAt(progress);report("recording",progress,`Recording ${Math.round(progress*100)}%`);nextFrame+=frameInterval;}
-          if(progress>=1){resolve();return;}this.animationFrame=requestAnimationFrame(tick);
-        };
-        this.animationFrame=requestAnimationFrame(tick);
-      });
-      this.resolveLoop=null;this.animationFrame=0;if(!this.cancelled){renderAt(1);report("finalizing",1,"Finalizing WebM…");await new Promise(resolve=>setTimeout(resolve,80));}
-      if(this.recorder.state!=="inactive")this.recorder.stop();const blob=await stopped;
+      const setPaused=async(paused:boolean)=>{
+        if(!this.recorder||this.recorder.state==="inactive"||paused===(this.recorder.state==="paused"))return;
+        const event=paused?"pause":"resume";
+        await new Promise<void>((resolve,reject)=>{
+          const onError=()=>{cleanup();reject(new Error("The browser could not synchronize the video clock."));};
+          const onState=()=>{cleanup();resolve();};
+          const cleanup=()=>{this.recorder?.removeEventListener(event,onState);this.recorder?.removeEventListener("error",onError);};
+          this.recorder!.addEventListener(event,onState,{once:true});this.recorder!.addEventListener("error",onError,{once:true});
+          if(paused)this.recorder!.pause();else this.recorder!.resume();
+        });
+      };
+      const totalFrames=exportFrameCount(options.durationSeconds,options.frameRate),frameInterval=1000/options.frameRate;
+      // MediaRecorder timestamps follow wall-clock time. Suspend that clock
+      // while WebGL computes each frame, then expose the completed frame for
+      // one exact interval. Day and night therefore occupy equal timeline
+      // distances even when their bloom passes have different GPU costs.
+      await setPaused(true);
+      for(let frameIndex=0;frameIndex<totalFrames&&!this.cancelled;frameIndex++){
+        const progress=exportFrameProgress(frameIndex,totalFrames);renderAt(progress);
+        await setPaused(false);if(manualCapture)captureTrack?.requestFrame();
+        report("recording",progress,`Recording ordered frame ${frameIndex+1} / ${totalFrames}`);
+        await new Promise<void>(resolve=>{this.resolveWait=resolve;this.timer=window.setTimeout(resolve,frameInterval);});
+        this.timer=0;this.resolveWait=null;
+        if(!this.cancelled)await setPaused(true);
+      }
+      if(!this.cancelled){report("finalizing",1,"Finalizing WebM…");await new Promise(resolve=>setTimeout(resolve,80));}
+      if(this.recorder.state!=="inactive")this.recorder.stop();const recordedBlob=await stopped;
       if(this.cancelled){report("cancelled",0,"Export cancelled");return null;}
-      if(!blob.size)throw new Error("The browser returned an empty video.");
+      if(!recordedBlob.size)throw new Error("The browser returned an empty video.");
+      report("finalizing",1,"Writing WebM duration metadata…");
+      const blob=await fixWebmDuration(recordedBlob,options.durationSeconds*1000);
       const url=URL.createObjectURL(blob),link=document.createElement("a");link.href=url;link.download=exportFilename(options.date,options.composition);link.click();setTimeout(()=>URL.revokeObjectURL(url),60_000);
       report("complete",1,"WebM downloaded");return {blob,filename:link.download,mimeType};
     }catch(error){
       if(error instanceof DOMException&&error.name==="AbortError"){report("cancelled",0,"Export cancelled");return null;}
       report("error",0,error instanceof Error?error.message:"Video export failed");throw error;
     }finally{
-      if(this.animationFrame)cancelAnimationFrame(this.animationFrame);this.animationFrame=0;this.resolveLoop=null;
+      if(this.timer)clearTimeout(this.timer);this.timer=0;this.resolveWait=null;
       if(this.recorder?.state!=="inactive")this.recorder?.stop();this.stream?.getTracks().forEach(track=>track.stop());this.stream=null;this.recorder=null;renderer?.destroy();
     }
   }

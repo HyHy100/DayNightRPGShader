@@ -9,6 +9,10 @@ export interface DaylightGrade {
   bloomKnee:number; halationStrength:number; glareStrength:number; moonGlowStrength:number;
 }
 const clamp=(x:number,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const mix=(a:number,b:number,t:number)=>a+(b-a)*t;
+// C2-continuous lower bound. Unlike max(), this does not introduce a visible
+// derivative corner when two independently adapted light sources cross over.
+const smoothFloor=(value:number,floor:number,width=.12)=>mix(value,floor,smootherstep(-width,width,floor-value));
 
 export function daylightPhase(s:AtmosphereState){
   // Twilight definitions use the unrefracted solar-disc center. Apparent
@@ -92,10 +96,19 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   const moonOffset=rgbOffset(moonColor,.12);
   const warmSeparation=lowSun*(.26+.13*eveningBias)*(.65+.35*s.spectralSeparation)+afternoonWarmth*.10+storyGolden*.16+.25*morningCharacter+.35*afternoonCharacter;
   const coolSeparation=clamp(s.skyCoolness*(.26+.35*(1-noon))+.20*lowSun*(.55+.45*s.spectralSeparation)+.07*morningFreshness+.11*morningCharacter+.13*afternoonCharacter-.100*noonCrown+.06*s.eveningAfterglow+.08*s.preDawnAirglow-.05*deepNightDensity);
-  const exposure=-.04+.14*noon-.12*(1-noon)*daylight-.08*s.haze*skyIllumination-.03*afternoon
+  const baseExposure=-.04+.14*noon-.12*(1-noon)*daylight-.08*s.haze*skyIllumination-.03*afternoon
     -3.0*solarDarkening-.20*deepNightDensity
     +.05*s.eveningAfterglow+.04*s.preDawnAirglow+.025*s.scotopicAdaptation+(.45+.50*storySky)*moon+1.45*storyMoonAdaptation+.065*storyGolden
     -.090*morningCharacter+.120*noonCrown-.060*afternoonCharacter;
+  // A bright fictional Moon and the approaching dawn sky are independent
+  // luminance sources. Adding separately gated EV terms made both temporarily
+  // disappear around astronomical dawn, producing an implausible dark valley.
+  // This morning-only floor approximates log-domain source combination: it
+  // becomes relevant only for a high Story Moon, rises with dawn radiance, and
+  // naturally stops affecting the image once the solar exposure exceeds it.
+  const highMoonDawn=storySky*(1-s.evening)*smootherstep(.55,.95,moonIllumination)*smootherstep(-30,-18,elevation);
+  const dawnCombinedFloor=-2.65+1.50*Math.pow(clamp(moonIllumination),2)+.65*smootherstep(-18,-2,elevation);
+  const exposure=mix(baseExposure,smoothFloor(baseExposure,dawnCombinedFloor),highMoonDawn);
   const temperature=s.sunWarmth*(.40+.16*eveningBias)-s.skyCoolness*.12*s.twilight-s.night*.25-.07*deepNightDensity-.04*s.preDawnAirglow+afternoonWarmth*.11-morningFreshness*.025-.018*moon+.090*storyGolden
     +.180*morningCharacter-.080*noonCrown+.220*afternoonCharacter;
   const tint=clamp(s.sunIlluminant.tint*.08+s.skyIlluminant.tint*.04,-.04,.04)+eveningBias*lowSun*.024;

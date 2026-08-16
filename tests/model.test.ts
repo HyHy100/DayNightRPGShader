@@ -6,7 +6,22 @@ import { daylightAt } from "../src/daylight/daylightModel";
 import { calculateLunarPosition } from "../src/daylight/lunarPosition";
 import { calculateMoonlight,calculateStoryMoonlight,UNAVAILABLE_MOONLIGHT } from "../src/daylight/moonlightModel";
 import { calculateSolarPosition } from "../src/daylight/solarPosition";
-import { chooseWebMMimeType,exportFilename,getExportDimensions,sampleDayCycleTimeline } from "../src/export/videoExportModel";
+import { chooseWebMMimeType,exportFilename,exportFrameCount,exportFrameProgress,getExportDimensions,sampleDayCycleTimeline } from "../src/export/videoExportModel";
+import { fixWebmDuration } from "../src/export/fixWebmDuration";
+
+test("video export writes an exact WebM duration for Linux players",async()=>{
+  const bytes=new Uint8Array([
+    0x1a,0x45,0xdf,0xa3,0x80,
+    0x18,0x53,0x80,0x67,0xff,
+    0x15,0x49,0xa9,0x66,0x87,
+    0x2a,0xd7,0xb1,0x83,0x0f,0x42,0x40,
+  ]);
+  const fixed=new Uint8Array(await (await fixWebmDuration(new Blob([bytes],{type:"video/webm"}),15_000)).arrayBuffer());
+  let duration=-1;
+  for(let index=0;index<=fixed.length-11;index++)if(fixed[index]===0x44&&fixed[index+1]===0x89&&fixed[index+2]===0x88)duration=new DataView(fixed.buffer,fixed.byteOffset+index+3,8).getFloat64(0,false);
+  assert.equal(duration,15_000);
+  assert.equal(fixed.length,bytes.length+11);
+});
 
 test("video export maps one chronological local day without quantization",()=>{
   const base=new Date(2026,7,16,12),start=sampleDayCycleTimeline(base,0),quarter=sampleDayCycleTimeline(base,.25),end=sampleDayCycleTimeline(base,1);
@@ -21,6 +36,15 @@ test("video export selects WebM fallbacks and stable output metadata",()=>{
   assert.equal(chooseWebMMimeType(type=>type.includes("vp8")),"video/webm;codecs=vp8");
   assert.equal(chooseWebMMimeType(()=>false),null);
   assert.equal(exportFilename(new Date(2026,7,16),"comparison"),"daylight-cycle-2026-08-16-comparison.webm");
+});
+
+test("video export samples every frame deterministically instead of wall-clock skipping",()=>{
+  const total=exportFrameCount(15,30);assert.equal(total,450);
+  const progress=Array.from({length:total},(_,index)=>exportFrameProgress(index,total));
+  assert.equal(progress[0],0);assert.equal(progress.at(-1),1);
+  for(let i=1;i<progress.length;i++)assert.ok(progress[i]>progress[i-1]);
+  const phases=new Set(progress.map(value=>daylightAt(sampleDayCycleTimeline(new Date(2026,7,16),value).hour).grade.name));
+  for(const phase of ["Pre-dawn Night","Astronomical Twilight","Nautical Twilight","Civil Twilight","Early Sunrise"])assert.ok(phases.has(phase),`${phase} must receive recorded frames`);
 });
 
 test("the 24-hour physical model closes seamlessly",()=>{
@@ -141,6 +165,16 @@ test("a full Story Moon cannot invert the evening twilight brightness hierarchy"
   const nauticalStart=daylightAt(19.15).grade,nauticalEnd=daylightAt(19.6).grade;
   assert.ok(nauticalEnd.lift[1]<=nauticalStart.lift[1]+.0002,"lunar toe adaptation must not lift nautical twilight");
   assert.ok(nauticalEnd.blackPoint>=nauticalStart.blackPoint-.0005,"lunar black-point opening must wait until astronomical twilight");
+});
+
+test("a high Story Moon hands off smoothly into astronomical dawn",()=>{
+  const base=new Date("2026-08-16T12:00:00-03:00"),fullMoon={illuminatedFraction:1,transitHour:0,maximumElevation:68,waxing:true};
+  const samples=[];
+  for(let minute=4*60;minute<=6*60;minute+=5)samples.push(daylightAt(minute/60,base,null,ATMOSPHERE_PRESETS.Standard,fullMoon).grade.exposure);
+  assert.ok(Math.min(...samples)>-1.4,"bright moonlight must not collapse into a dark astronomical-dawn valley");
+  for(let i=1;i<samples.length;i++)assert.ok(samples[i]>=samples[i-1]-.035,`pre-dawn exposure reversed at sample ${i}`);
+  const moonless={...fullMoon,illuminatedFraction:.001};
+  assert.ok(daylightAt(4.5,base,null,ATMOSPHERE_PRESETS.Standard,fullMoon).grade.exposure>daylightAt(4.5,base,null,ATMOSPHERE_PRESETS.Standard,moonless).grade.exposure+.7);
 });
 
 test("true night evolves through afterglow, story moon, and pre-dawn",()=>{
