@@ -51,6 +51,8 @@ test("horizon lighting survives the irradiance fade and remains asymmetric",()=>
   assert.ok(sunset.grade.highlights[0]>sunrise.grade.highlights[0]+.015,"evening should be richer than morning");
   assert.ok(afterglow.atmosphere.lowSunFactor>.1,"warm horizon must persist into civil twilight");
   assert.ok(sunset.grade.temperature>sunrise.grade.temperature+.15);
+  assert.ok(sunset.grade.midtones[0]>sunrise.grade.midtones[0]+.012,"golden sunset must reach upper midtones, not only highlights");
+  assert.ok(sunset.grade.exposure>sunrise.grade.exposure,"story sunset should retain luminous photographic presence");
 });
 
 test("twilight exposure darkens monotonically below daytime",()=>{
