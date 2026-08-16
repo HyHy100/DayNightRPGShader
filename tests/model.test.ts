@@ -28,6 +28,8 @@ test("optical response emerges at low sun and remains restrained at night",()=>{
   assert.ok(golden.glareStrength>noon.glareStrength+.01);
   assert.ok(night.bloomThreshold>golden.bloomThreshold+.15);
   assert.ok(night.bloomStrength<noon.bloomStrength);
+  assert.ok(golden.bloomThreshold<.15,"low-sun threshold must extract energy from dark story plates");
+  assert.ok(golden.bloomStrength>.2,"full optical control must be visibly authorable");
 });
 
 test("atmospheric influences are smooth and playback is not minute-quantized",()=>{

@@ -107,17 +107,21 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   // Low-angle direct light receives the broadest shoulder and warm halation;
   // high daylight stays clean, while night requires an actual bright pixel.
   const opticalDaylight=smootherstep(-8,8,elevation);
-  const bloomStrength=.018+.050*opticalDaylight+.075*lowSun+.025*noonCrown-.028*s.night;
-  const bloomThreshold=.34+.10*noonCrown+.22*s.night-.075*lowSun-.030*storyGolden;
-  const bloomKnee=.16+.075*lowSun+.025*s.haze;
-  const halationStrength=.008+.095*lowSun*(.60+.40*s.sunWarmth)+.030*storyGolden+.012*afternoonCharacter;
-  const glareStrength=.006+.038*lowSun*(.55+.45*s.haze)+.026*storyGolden+.008*noonCrown;
+  // This threshold is expressed in the post-filmic linear-light domain. It is
+  // intentionally well below 18% display gray: dark RPG/visual-novel plates
+  // often contain no specular values above 0.3 after their night/day grade.
+  // The former 0.34 floor therefore extracted virtually no energy.
+  const bloomStrength=.055+.135*opticalDaylight+.165*lowSun+.040*noonCrown-.060*s.night;
+  const bloomThreshold=.115+.065*noonCrown+.275*s.night-.050*lowSun-.025*storyGolden;
+  const bloomKnee=.085+.060*lowSun+.018*s.haze;
+  const halationStrength=.014+.175*lowSun*(.60+.40*s.sunWarmth)+.055*storyGolden+.018*afternoonCharacter;
+  const glareStrength=.008+.075*lowSun*(.55+.45*s.haze)+.042*storyGolden+.010*noonCrown;
   const [name,description]=daylightPhase(s);
   return {hour,name,description,exposure,temperature,tint,contrast,saturation,vibrance,lift,gamma,gain,shadows,midtones,highlights,
     blackPoint:Math.max(0,.003+.010*s.night+.007*deepNightDensity-.003*s.scotopicAdaptation+.002*s.twilight-(.003+.008*storySky)*moonNightTone-.0015*storyGolden-.001*morningCharacter+.0012*afternoonCharacter),
     highlightRolloff:.28+.25*noon+.20*lowSun+.16*s.twilight+.14*s.night+.045*morningCharacter+.040*afternoonCharacter,
     clarity:.065*noon-.055*s.haze-.025*s.twilight+.012*moonNightTone+.020*noonCrown-.015*morningCharacter-.010*afternoonCharacter,
     filmStrength:.42+.20*lowSun+.18*s.twilight+.20*s.night+.08*deepNightDensity+.035*morningCharacter+.045*afternoonCharacter,
-    bloomStrength:Math.max(.006,bloomStrength),bloomThreshold:clamp(bloomThreshold,.24,.72),
-    bloomKnee:clamp(bloomKnee,.12,.28),halationStrength:Math.max(0,halationStrength),glareStrength:Math.max(0,glareStrength)};
+    bloomStrength:Math.max(.008,bloomStrength),bloomThreshold:clamp(bloomThreshold,.055,.58),
+    bloomKnee:clamp(bloomKnee,.065,.20),halationStrength:Math.max(0,halationStrength),glareStrength:Math.max(0,glareStrength)};
 }
