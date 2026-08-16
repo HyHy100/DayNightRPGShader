@@ -23,10 +23,11 @@ npm start
 ```text
 app/                         Vinext/React route and application styling
 src/daylight/
-  presets.ts                 16 authored grading anchors (00:00–24:00)
-  interpolation.ts           cyclic, smooth Hermite interpolation
-  daylightModel.ts           local-clock model and formatting
-  solarPosition.ts           optional on-device solar elevation model
+  solarPosition.ts           NOAA solar position, azimuth, equation of time, events
+  atmosphereModel.ts         air mass, irradiance, scattering and twilight signals
+  perceptualColor.ts         OKLab conversion and perceptual illuminant mixing
+  artDirection.ts            physical-state to cinematic-grade interpretation
+  daylightModel.ts           orchestration and clock-only reference fallback
 src/renderer/
   WebGLRenderer.ts           WebGL2 lifecycle, state, uniforms, DPR sizing
   ShaderProgram.ts           shader compile/link and uniform cache
@@ -38,13 +39,15 @@ src/shaders/
 src/ui/DaylightStudio.tsx    controls, clock, file flow, comparison interaction
 ```
 
-Rendering, clock time, daylight interpretation, grading data, interpolation, solar calculations, and UI state are deliberately separate. Time changes update uniforms only: image and LUT textures remain resident and shaders are never recompiled.
+Rendering, astronomical geometry, atmospheric physics, cinematic interpretation, perceptual color, and UI state are deliberately separate. Time changes update uniforms only: image and LUT textures remain resident and shaders are never recompiled.
 
 ## Daylight model
 
-The model uses authored anchors at midnight, deep night, pre-dawn, dawn, sunrise, morning, late morning, noon, early/late afternoon, golden hour, sunset, evening blue hour, night, late night, and the midnight loop endpoint. Each complete parameter vector is interpolated with a cubic smoothstep curve between neighboring anchors. The 24:00 anchor exactly matches 00:00, so the daily wrap is continuous.
+There are no hourly grading presets. With permission, the model calculates NOAA-derived equation of time, declination, hour angle, apparent solar elevation, azimuth, solar noon, sunrise/sunset, and civil/nautical/astronomical twilight for the current date and latitude/longitude. Kasten–Young air mass then drives continuous approximations of irradiance, direct/diffuse balance, Rayleigh-like sky contribution, Mie-like horizon haze, sun and sky CCT, golden-hour response, blue-hour response, and twilight depth.
 
-Auto mode follows local device time. Optional Solar Sync uses latitude/longitude only in browser memory and a NOAA-style solar elevation approximation, then maps seasonal dawn, golden hour, and twilight onto the same stable artistic cycle. It requires no network call. Denied or unavailable geolocation falls back to local clock time.
+Those physical signals feed a separate art-direction model. Direct sunlight influences highlights and upper midtones; diffuse sky influences shadows and lower midtones. Illuminant colors mix in OKLab, while exposure and chromatic adaptation remain physically appropriate linear/LMS operations. Morning/evening asymmetry is introduced through normalized sunrise→solar-noon→sunset progress without overriding elevation.
+
+Every influence uses overlapping Gaussian or C2-continuous smootherstep functions. Minute-resolution tests bound the derivative of exposure, temperature, contrast, saturation, and highlight rolloff, and verify the 24:00→00:00 closure. When location is unavailable, a continuous clock-driven reference solar arc supplies the same atmospheric pipeline rather than reverting to preset interpolation.
 
 ## GPU color pipeline
 
@@ -72,7 +75,9 @@ Browsers cannot silently read arbitrary files from `~/Downloads`. During project
 ## Controls
 
 - **Auto time / Manual:** live local time or arbitrary minute-precision preview.
-- **Solar Sync:** optional daylight remapping from local solar elevation.
+- **Solar geometry:** optional date/location-aware astronomical calculations, entirely on-device.
+- **Physics:** full-day plot and live inspection of elevation, azimuth, solar time, air mass, irradiance, CCT, scattering, haze, golden/blue-hour, twilight, and night signals.
+- **Play full day:** 15, 30, or 60-second accelerated continuity preview.
 - **Original / Compare:** graded, original, or draggable split view.
 - **Grade intensity:** perceptual blend from original to full grade.
 - The comparison divider supports pointer drag and arrow-key adjustment.

@@ -1,7 +1,7 @@
 import vertexSource from "../shaders/image.vert?raw";
 import fragmentSourceRaw from "../shaders/grading.frag?raw";
 import colorScience from "../shaders/colorScience.glsl?raw";
-import type { InterpolatedGrade } from "../daylight/interpolation";
+import type { DaylightGrade } from "../daylight/artDirection";
 import { ShaderProgram } from "./ShaderProgram";
 import { createFilmLut, loadImageTexture } from "./TextureLoader";
 
@@ -61,7 +61,7 @@ export class WebGLRenderer {
     return { width: next.width, height: next.height };
   }
 
-  setGrade(g: InterpolatedGrade) {
+  setGrade(g: DaylightGrade) {
     const { gl, shader: s } = this;
     s.use();
     gl.uniform1f(s.uniform("uExposure"), g.exposure);

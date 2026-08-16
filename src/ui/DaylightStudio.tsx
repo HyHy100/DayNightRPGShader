@@ -1,154 +1,48 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { daylightAt, formatTime, localClockHours } from "../daylight/daylightModel";
-import { solarAwareArtisticHour, solarElevation } from "../daylight/solarPosition";
-import { WebGLRenderer, type ComparisonMode } from "../renderer/WebGLRenderer";
+import { useCallback,useEffect,useMemo,useRef,useState } from "react";
+import { daylightAt,formatTime,localClockHours } from "../daylight/daylightModel";
+import type { GeoLocation } from "../daylight/solarPosition";
+import { WebGLRenderer,type ComparisonMode } from "../renderer/WebGLRenderer";
 
-const DEFAULT_IMAGE = "/latest-download.png";
+const DEFAULT_IMAGE="/latest-download.png";
+const n=(v:number,d=2)=>Number.isFinite(v)?v.toFixed(d):"—";
 
-export default function DaylightStudio() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const viewerRef = useRef<HTMLDivElement>(null);
-  const rendererRef = useRef<WebGLRenderer | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-  // Deterministic noon baseline avoids SSR/client timezone hydration drift; Auto updates after mount.
-  const [hour, setHour] = useState(12);
-  const [auto, setAuto] = useState(true);
-  const [solar, setSolar] = useState<{lat:number; lon:number} | null>(null);
-  const [solarAlt, setSolarAlt] = useState<number | null>(null);
-  const [intensity, setIntensity] = useState(1);
-  const [split, setSplit] = useState(.5);
-  const [comparison, setComparison] = useState<ComparisonMode>("split");
-  const [imageInfo, setImageInfo] = useState("leste-refugio.png · 1456 × 1080");
-  const [status, setStatus] = useState("Initializing GPU pipeline…");
-  const grade = useMemo(() => daylightAt(hour), [hour]);
+function DayCurve({hour,location}:{hour:number;location:GeoLocation|null}){
+  const ref=useRef<HTMLCanvasElement>(null);
+  useEffect(()=>{const c=ref.current;if(!c)return;const dpr=Math.min(2,devicePixelRatio||1),w=c.clientWidth*dpr,h=c.clientHeight*dpr;c.width=w;c.height=h;const x=c.getContext("2d");if(!x)return;x.scale(dpr,dpr);const W=c.clientWidth,H=c.clientHeight;x.clearRect(0,0,W,H);x.strokeStyle="#ffffff12";x.lineWidth=1;for(let i=1;i<4;i++){x.beginPath();x.moveTo(0,H*i/4);x.lineTo(W,H*i/4);x.stroke();}const plot=(color:string,value:(t:number)=>number)=>{x.strokeStyle=color;x.lineWidth=1.4;x.beginPath();for(let i=0;i<=96;i++){const t=i/4,v=value(t),px=W*i/96,py=H-(v*H);if(i)x.lineTo(px,py);else x.moveTo(px,py);}x.stroke();};const base=new Date();plot("#e8b562",t=>Math.max(0,Math.min(1,(daylightAt(t,base,location).atmosphere.elevation+18)/93)));plot("#6f9fd0",t=>daylightAt(t,base,location).atmosphere.blueHour);plot("#d86f4a",t=>daylightAt(t,base,location).atmosphere.goldenHour);x.strokeStyle="#f2eee5";x.beginPath();x.moveTo(W*(hour/24),0);x.lineTo(W*(hour/24),H);x.stroke();},[hour,location]);
+  return <canvas ref={ref} className="day-curve" aria-label="Full-day solar elevation and atmospheric influence plot"/>;
+}
 
-  useEffect(() => {
-    if (!canvasRef.current) return;
-    try {
-      const renderer = new WebGLRenderer(canvasRef.current);
-      rendererRef.current = renderer;
-      renderer.setImage(DEFAULT_IMAGE).then(({width,height}) => {
-        setImageInfo(`leste-refugio.png · ${width} × ${height}`);
-        setStatus("");
-        renderer.setGrade(daylightAt(hour));
-      }).catch((error) => setStatus(error instanceof Error ? error.message : "Image could not be loaded"));
-      return () => renderer.destroy();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "WebGL initialization failed";
-      queueMicrotask(() => setStatus(message));
-    }
-  // Renderer lifecycle is intentionally independent from reactive grade state.
+export default function DaylightStudio(){
+  const canvasRef=useRef<HTMLCanvasElement>(null),viewerRef=useRef<HTMLDivElement>(null),rendererRef=useRef<WebGLRenderer|null>(null),fileRef=useRef<HTMLInputElement>(null),playStartRef=useRef({clock:0,hour:0});
+  const [hour,setHour]=useState(12),[auto,setAuto]=useState(true),[location,setLocation]=useState<GeoLocation|null>(null),[intensity,setIntensity]=useState(1),[split,setSplit]=useState(.5),[comparison,setComparison]=useState<ComparisonMode>("split");
+  const [debug,setDebug]=useState(false),[playing,setPlaying]=useState(false),[playSeconds,setPlaySeconds]=useState(30),[imageInfo,setImageInfo]=useState("leste-refugio.png · 1456 × 1080"),[status,setStatus]=useState("Initializing GPU pipeline…");
+  const model=useMemo(()=>daylightAt(hour,new Date(),location),[hour,location]);const {grade,atmosphere:a}=model;
+
+  useEffect(()=>{if(!canvasRef.current)return;try{const r=new WebGLRenderer(canvasRef.current);rendererRef.current=r;r.setImage(DEFAULT_IMAGE).then(({width,height})=>{setImageInfo(`leste-refugio.png · ${width} × ${height}`);setStatus("");r.setGrade(daylightAt(hour,new Date(),location).grade);}).catch(e=>setStatus(e instanceof Error?e.message:"Image could not be loaded"));return()=>r.destroy();}catch(e){const message=e instanceof Error?e.message:"WebGL initialization failed";queueMicrotask(()=>setStatus(message));}
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  },[]);
+  useEffect(()=>rendererRef.current?.setGrade(grade),[grade]);
+  useEffect(()=>rendererRef.current?.setIntensity(intensity),[intensity]);useEffect(()=>rendererRef.current?.setSplit(split),[split]);useEffect(()=>rendererRef.current?.setComparison(comparison),[comparison]);
+  useEffect(()=>{if(!auto||playing)return;const update=()=>setHour(localClockHours());update();const timer=setInterval(update,1000);return()=>clearInterval(timer);},[auto,playing]);
+  useEffect(()=>{if(!playing)return;let frame=0;const tick=(now:number)=>{setHour((playStartRef.current.hour+(now-playStartRef.current.clock)/1000*24/playSeconds)%24);frame=requestAnimationFrame(tick);};frame=requestAnimationFrame(tick);return()=>cancelAnimationFrame(frame);},[playing,playSeconds]);
 
-  useEffect(() => { rendererRef.current?.setGrade(grade); }, [grade]);
-  useEffect(() => { rendererRef.current?.setIntensity(intensity); }, [intensity]);
-  useEffect(() => { rendererRef.current?.setSplit(split); }, [split]);
-  useEffect(() => { rendererRef.current?.setComparison(comparison); }, [comparison]);
+  const loadFile=async(file?:File)=>{if(!file||!rendererRef.current)return;setStatus("Loading local image…");try{const {width,height}=await rendererRef.current.setImage(file);setImageInfo(`${file.name} · ${width} × ${height}`);setStatus("");}catch(e){setStatus(e instanceof Error?e.message:"Unsupported image");}};
+  const enableSolar=()=>navigator.geolocation?.getCurrentPosition(({coords})=>{setLocation({lat:coords.latitude,lon:coords.longitude});setAuto(true);},()=>setLocation(null),{timeout:7000,maximumAge:3600000});
+  const updateSplit=useCallback((clientX:number)=>{const r=viewerRef.current?.getBoundingClientRect();if(r)setSplit(Math.max(0,Math.min(1,(clientX-r.left)/r.width)));},[]);
+  const startSplitDrag=(e:React.PointerEvent)=>{e.currentTarget.setPointerCapture(e.pointerId);updateSplit(e.clientX);};
+  const metrics:[[string,string],[string,string]][]=[[["Solar elevation",`${n(a.elevation,2)}°`],["Solar azimuth",`${n(a.azimuth,1)}°`]],[["Solar time",formatTime(a.solarTime)],["Air mass",n(a.airMass,2)]],[["Sun intensity",n(a.sunIntensity,3)],["Direct / diffuse",n(a.directDiffuseRatio,3)]],[["Sun CCT",`${Math.round(a.sunCCT)} K`],["Sky CCT",`${Math.round(a.skyCCT)} K`]],[["Rayleigh",n(a.rayleigh,3)],["Mie",n(a.mie,3)]],[["Haze",n(a.haze,3)],["Sun warmth",n(a.sunWarmth,3)]],[["Golden factor",n(a.goldenHour,3)],["Blue-hour factor",n(a.blueHour,3)]],[["Twilight",n(a.twilight,3)],["Night",n(a.night,3)]]];
 
-  useEffect(() => {
-    if (!auto) return;
-    const update = () => {
-      const now = new Date();
-      if (solar) {
-        setHour(solarAwareArtisticHour(now, solar.lat, solar.lon));
-        setSolarAlt(solarElevation(now, solar.lat, solar.lon));
-      } else setHour(localClockHours(now));
-    };
-    update();
-    const timer = window.setInterval(update, 1000);
-    return () => clearInterval(timer);
-  }, [auto, solar]);
-
-  const loadFile = async (file?: File) => {
-    if (!file || !rendererRef.current) return;
-    setStatus("Loading local image…");
-    try {
-      const {width,height} = await rendererRef.current.setImage(file);
-      setImageInfo(`${file.name} · ${width} × ${height}`);
-      setStatus("");
-    } catch (error) { setStatus(error instanceof Error ? error.message : "Unsupported image"); }
-  };
-
-  const enableSolar = () => {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      ({coords}) => { setSolar({lat: coords.latitude, lon: coords.longitude}); setAuto(true); },
-      () => setSolar(null),
-      { enableHighAccuracy: false, timeout: 7000, maximumAge: 3600000 },
-    );
-  };
-
-  const updateSplit = useCallback((clientX: number) => {
-    const rect = viewerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    setSplit(Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)));
-  }, []);
-
-  const startSplitDrag = (event: React.PointerEvent) => {
-    event.currentTarget.setPointerCapture(event.pointerId);
-    updateSplit(event.clientX);
-  };
-
-  return (
-    <main className="studio">
-      <header className="topbar">
-        <div className="brand"><i className="brand-mark" aria-hidden="true"/><span>Daylight / Color Studio</span></div>
-        <div className="top-actions">
-          <button className="chip source-chip" onClick={() => fileRef.current?.click()}>Open image</button>
-          <button className={`chip ${comparison === "original" ? "active" : ""}`} onClick={() => setComparison(comparison === "original" ? "graded" : "original")}>{comparison === "original" ? "Show grade" : "Original"}</button>
-          <button className={`chip ${comparison === "split" ? "active" : ""}`} onClick={() => setComparison(comparison === "split" ? "graded" : "split")}>Compare</button>
-          <input ref={fileRef} className="file-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => loadFile(e.target.files?.[0])}/>
-        </div>
-      </header>
-
-      <section className="workspace">
-        <div className="viewer" ref={viewerRef}>
-          <canvas ref={canvasRef} aria-label="GPU color graded image preview"/>
-          {status && <div className="loading">{status}</div>}
-          {comparison === "split" && <>
-            <span className="compare-tag before">Original</span><span className="compare-tag after">Graded</span>
-            <div className="split-handle" role="slider" aria-label="Before and after split" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(split*100)} tabIndex={0} style={{left: `${split*100}%`}} onPointerDown={startSplitDrag} onPointerMove={(e) => e.currentTarget.hasPointerCapture(e.pointerId) && updateSplit(e.clientX)} onKeyDown={(e) => { if (e.key === "ArrowLeft") setSplit(v => Math.max(0,v-.02)); if (e.key === "ArrowRight") setSplit(v => Math.min(1,v+.02)); }}/>
-          </>}
-          <span className="image-caption">{imageInfo}</span>
-        </div>
-
-        <aside className="panel" aria-label="Daylight grade controls">
-          <div className="panel-section">
-            <div className="eyebrow">Current atmosphere</div>
-            <div className="phase-row"><div className="phase-name">{grade.name}</div><div className="timecode">{formatTime(hour)}</div></div>
-            <div className="phase-sub">{grade.description}</div>
-          </div>
-          <div className="panel-section">
-            <div className="control-head"><span>Time of day</span><span className="value">{formatTime(hour)}</span></div>
-            <input aria-label="Time of day" type="range" min="0" max="1439" value={Math.round(hour*60)%1440} onInput={(e) => { setAuto(false); setHour(Number(e.currentTarget.value)/60); }}/>
-            <div className="ticks"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
-            <div className="mode-row"><button className={`chip ${auto ? "active" : ""}`} onClick={() => setAuto(true)}>Auto time</button><button className={`chip ${!auto ? "active" : ""}`} onClick={() => setAuto(false)}>Manual</button></div>
-            <div className="hint">{auto ? (solar ? "Solar elevation remaps the artistic cycle to local daylight." : "Following the device clock. Solar sync is optional.") : `Blending ${grade.previousName} → ${grade.nextName} · ${Math.round(grade.blend*100)}%`}</div>
-          </div>
-          <div className="panel-section">
-            <div className="control-head"><span>Grade intensity</span><span className="value">{Math.round(intensity*100)}%</span></div>
-            <input className="intensity" aria-label="Grade intensity" type="range" min="0" max="100" value={Math.round(intensity*100)} onInput={(e) => setIntensity(Number(e.currentTarget.value)/100)}/>
-          </div>
-          <div className="panel-section">
-            <div className="control-head"><span>Daylight source</span><span className="value">{solar ? "SOLAR" : "CLOCK"}</span></div>
-            <button className={`chip ${solar ? "active" : ""}`} onClick={enableSolar}>{solar ? "Solar sync enabled" : "Enable solar sync"}</button>
-            <div className="hint">Location stays in this browser and is used only for on-device solar elevation.</div>
-          </div>
-          <div className="panel-section">
-            <div className="stat-grid">
-              <div><div className="stat-label">Exposure</div><div className="stat-value">{grade.exposure >= 0 ? "+" : ""}{grade.exposure.toFixed(2)} EV</div></div>
-              <div><div className="stat-label">Temperature</div><div className="stat-value">{grade.temperature >= 0 ? "+" : ""}{grade.temperature.toFixed(2)}</div></div>
-              <div><div className="stat-label">Film density</div><div className="stat-value">{Math.round(grade.filmStrength*100)}%</div></div>
-              <div><div className="stat-label">Solar altitude</div><div className="stat-value">{solarAlt == null ? "—" : `${solarAlt.toFixed(1)}°`}</div></div>
-            </div>
-          </div>
-        </aside>
-      </section>
-
-      <footer className="bottombar"><div className="legend"><span>WebGL2 active</span><span>32³ film LUT</span><span>sRGB managed</span></div><div>Drag the divider to compare · ← → for precision</div></footer>
-    </main>
-  );
+  return <main className="studio">
+    <header className="topbar"><div className="brand"><i className="brand-mark"/><span>Daylight / Color Studio</span></div><div className="top-actions"><button className="chip source-chip" onClick={()=>fileRef.current?.click()}>Open image</button><button className={`chip ${debug?"active":""}`} onClick={()=>setDebug(v=>!v)}>Physics</button><button className={`chip ${comparison==="original"?"active":""}`} onClick={()=>setComparison(comparison==="original"?"graded":"original")}>{comparison==="original"?"Show grade":"Original"}</button><button className={`chip ${comparison==="split"?"active":""}`} onClick={()=>setComparison(comparison==="split"?"graded":"split")}>Compare</button><input ref={fileRef} className="file-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>loadFile(e.target.files?.[0])}/></div></header>
+    <section className="workspace"><div className="viewer" ref={viewerRef}><canvas ref={canvasRef} aria-label="GPU color graded image preview"/>{status&&<div className="loading">{status}</div>}{comparison==="split"&&<><span className="compare-tag before">Original</span><span className="compare-tag after">Graded</span><div className="split-handle" role="slider" aria-label="Before and after split" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(split*100)} tabIndex={0} style={{left:`${split*100}%`}} onPointerDown={startSplitDrag} onPointerMove={e=>e.currentTarget.hasPointerCapture(e.pointerId)&&updateSplit(e.clientX)} onKeyDown={e=>{if(e.key==="ArrowLeft")setSplit(v=>Math.max(0,v-.02));if(e.key==="ArrowRight")setSplit(v=>Math.min(1,v+.02));}}/></>}<span className="image-caption">{imageInfo}</span></div>
+      <aside className="panel" aria-label="Daylight grade controls"><div className="panel-section"><div className="eyebrow">Physical atmosphere</div><div className="phase-row"><div className="phase-name">{grade.name}</div><div className="timecode">{formatTime(hour)}</div></div><div className="phase-sub">{grade.description}</div></div>
+        <div className="panel-section"><div className="control-head"><span>Time of day</span><span className="value">{formatTime(hour)}</span></div><input aria-label="Time of day" type="range" min="0" max="1439" value={Math.round(hour*60)%1440} onInput={e=>{setPlaying(false);setAuto(false);setHour(Number(e.currentTarget.value)/60);}}/><div className="ticks"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div><div className="mode-row"><button className={`chip ${auto?"active":""}`} onClick={()=>{setPlaying(false);setAuto(true);}}>Auto time</button><button className={`chip ${!auto&&!playing?"active":""}`} onClick={()=>{setPlaying(false);setAuto(false);}}>Manual</button></div><div className="play-row"><button className={`chip ${playing?"active":""}`} onClick={()=>{if(playing)setPlaying(false);else{setAuto(false);playStartRef.current={clock:performance.now(),hour};setPlaying(true);}}}>{playing?"Pause day":"Play full day"}</button><select aria-label="Full-day playback duration" value={playSeconds} onChange={e=>{playStartRef.current={clock:performance.now(),hour};setPlaySeconds(Number(e.target.value));}}><option value="15">15 sec</option><option value="30">30 sec</option><option value="60">60 sec</option></select></div><div className="hint">{location?`Solar geometry · ${n(location.lat,2)}°, ${n(location.lon,2)}°`:("Clock fallback · enable solar sync for seasonal geometry")}</div></div>
+        <div className="panel-section"><div className="control-head"><span>Grade intensity</span><span className="value">{Math.round(intensity*100)}%</span></div><input className="intensity" aria-label="Grade intensity" type="range" min="0" max="100" value={Math.round(intensity*100)} onInput={e=>setIntensity(Number(e.currentTarget.value)/100)}/></div>
+        <div className="panel-section"><div className="control-head"><span>Daylight source</span><span className="value">{location?"SOLAR":"FALLBACK"}</span></div><button className={`chip ${location?"active":""}`} onClick={enableSolar}>{location?"Solar geometry enabled":"Enable solar geometry"}</button><div className="hint">Location remains on-device; no network request is made.</div></div>
+        {debug&&<div className="panel-section physics-panel"><div className="control-head"><span>Atmospheric model</span><span className="value">{location?"NOAA":"REFERENCE ARC"}</span></div><DayCurve hour={hour} location={location}/><div className="curve-legend"><span>Elevation</span><span>Blue hour</span><span>Golden</span></div>{metrics.map((row,i)=><div className="metric-row" key={i}>{row.map(([label,value])=><div key={label}><div className="stat-label">{label}</div><div className="stat-value">{value}</div></div>)}</div>)}</div>}
+        {!debug&&<div className="panel-section"><div className="stat-grid"><div><div className="stat-label">Elevation</div><div className="stat-value">{n(a.elevation,1)}°</div></div><div><div className="stat-label">Air mass</div><div className="stat-value">{n(a.airMass,2)}</div></div><div><div className="stat-label">Exposure</div><div className="stat-value">{grade.exposure>=0?"+":""}{n(grade.exposure)} EV</div></div><div><div className="stat-label">Film density</div><div className="stat-value">{Math.round(grade.filmStrength*100)}%</div></div></div></div>}
+      </aside></section><footer className="bottombar"><div className="legend"><span>WebGL2 active</span><span>Continuous solar model</span><span>32³ film LUT</span></div><div>Solar geometry → atmosphere → cinematic interpretation</div></footer>
+  </main>;
 }
