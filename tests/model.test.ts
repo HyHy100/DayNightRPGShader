@@ -29,6 +29,20 @@ test("daylight stages are meaningfully distinct without preset tables",()=>{
   assert.ok(golden.atmosphere.goldenHour>.7);
 });
 
+test("true night evolves through afterglow, anti-solar midnight, and pre-dawn",()=>{
+  const evening=daylightAt(19),late=daylightAt(21),midnight=daylightAt(0),preDawn=daylightAt(5);
+  assert.equal(evening.grade.name,"Early Night");
+  assert.equal(midnight.grade.name,"Deep Night");
+  assert.equal(preDawn.grade.name,"Pre-dawn Night");
+  assert.ok(evening.atmosphere.eveningAfterglow>.7);
+  assert.ok(midnight.atmosphere.midnightDepth>.95);
+  assert.ok(preDawn.atmosphere.preDawnAirglow>.7);
+  assert.ok(evening.grade.exposure>late.grade.exposure+.15);
+  assert.ok(preDawn.grade.exposure>midnight.grade.exposure+.2);
+  assert.ok(midnight.atmosphere.nightProgress>late.atmosphere.nightProgress);
+  assert.ok(preDawn.atmosphere.nightProgress>midnight.atmosphere.nightProgress);
+});
+
 test("Kasten-Young air mass falls as solar elevation rises",()=>{
   assert.ok(calculateAirMass(2)>calculateAirMass(10));
   assert.ok(calculateAirMass(10)>calculateAirMass(45));

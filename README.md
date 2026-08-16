@@ -47,6 +47,8 @@ There are no hourly grading presets. With permission, the model calculates NOAA-
 
 Those physical signals feed a separate art-direction model. Direct sunlight influences highlights and upper midtones; diffuse sky influences shadows and lower midtones. Illuminant colors mix in OKLab, while exposure and chromatic adaptation remain physically appropriate linear/LMS operations. Morning/evening asymmetry is introduced through normalized sunrise→solar-noon→sunset progress without overriding elevation.
 
+Below −18° the classification is physically **true night**, but the grade does not freeze. Solar hour angle continues around the dark hemisphere and drives a smooth evening-afterglow → anti-solar-midnight → pre-dawn-airglow trajectory. Solar-depression depth, a Gaussian midnight response, and restrained scotopic-adaptation shaping vary exposure, density, chroma, black point, and film response continuously. This intentionally avoids inventing moonlight: lunar position, phase, and cloud cover are not available inputs.
+
 Every influence uses overlapping Gaussian or C2-continuous smootherstep functions. Minute-resolution tests bound the derivative of exposure, temperature, contrast, saturation, and highlight rolloff, and verify the 24:00→00:00 closure. When location is unavailable, a continuous clock-driven reference solar arc supplies the same atmospheric pipeline rather than reverting to preset interpolation.
 
 ## GPU color pipeline
@@ -76,7 +78,7 @@ Browsers cannot silently read arbitrary files from `~/Downloads`. During project
 
 - **Auto time / Manual:** live local time or arbitrary minute-precision preview.
 - **Solar geometry:** optional date/location-aware astronomical calculations, entirely on-device.
-- **Physics:** full-day plot and live inspection of elevation, azimuth, solar time, air mass, irradiance, CCT, scattering, haze, golden/blue-hour, twilight, and night signals.
+- **Physics:** full-day plot and live inspection of elevation, azimuth, solar time, air mass, irradiance, CCT, scattering, haze, golden/blue-hour, twilight, deep-night depth, dark-hemisphere progress, afterglow, pre-dawn airglow, and visual adaptation.
 - **Play full day:** 15, 30, or 60-second accelerated continuity preview.
 - **Original / Compare:** graded, original, or draggable split view.
 - **Grade intensity:** perceptual blend from original to full grade.

@@ -75,6 +75,7 @@ input[type="range"]::-webkit-slider-thumb { appearance: none; width: 14px; heigh
 .curve-legend span::before { content: ""; display: inline-block; width: 5px; height: 5px; border-radius: 50%; margin-right: 5px; background: #e8b562; }
 .curve-legend span:nth-child(2)::before { background: #6f9fd0; }
 .curve-legend span:nth-child(3)::before { background: #d86f4a; }
+.curve-legend span:nth-child(4)::before { background: #766aa8; }
 .metric-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 7px 0; border-top: 1px solid #ffffff08; }
 
 .bottombar { min-height: 56px; padding: 10px 28px; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; color: #6f7273; font-size: 10px; }
