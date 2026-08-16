@@ -14,6 +14,7 @@ uniform float uOpticalGlow;
 uniform float uBloomStrength;
 uniform float uHalationStrength;
 uniform float uGlareStrength;
+uniform float uMoonGlowStrength;
 
 float luminance(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 vec3 linearToSrgb(vec3 c) {
@@ -41,10 +42,13 @@ void main() {
   // Film halation is red-biased and compact; it is deliberately not orange fog.
   vec3 halation = tightY * vec3(1.0, 0.24, 0.08) * uHalationStrength;
   vec3 glare = wideY * vec3(1.0, 0.88, 0.70) * uGlareStrength;
+  // Strong Story Moon illumination receives a broad silver-neutral response.
+  // It blooms existing high-value structures; it does not invent a Moon disc.
+  vec3 moonGlow = wideY * vec3(0.78, 0.88, 1.0) * uMoonGlowStrength;
   // A perceptual control curve gives the upper half of the authoring slider a
   // clearly visible range while retaining fine control near zero.
   float glowControl = uOpticalGlow * (0.55 + 0.85 * uOpticalGlow);
-  vec3 optical = (neutralBloom + halation + glare) * glowControl;
+  vec3 optical = (neutralBloom + halation + glare + moonGlow) * glowControl;
   vec3 gradedLinear = max(scene + optical, vec3(0.0));
   // A final soft display shoulder contains additive energy without bleaching color.
   gradedLinear /= 1.0 + max(gradedLinear - 0.92, vec3(0.0)) * 0.34;

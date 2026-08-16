@@ -9,12 +9,12 @@ import { calculateSolarPosition } from "../src/daylight/solarPosition";
 
 test("the 24-hour physical model closes seamlessly",()=>{
   const a=daylightAt(0),b=daylightAt(24);
-  for(const key of ["exposure","temperature","tint","contrast","saturation","vibrance","blackPoint","highlightRolloff","clarity","filmStrength","bloomStrength","bloomThreshold","bloomKnee","halationStrength","glareStrength"] as const) assert.ok(Math.abs(a.grade[key]-b.grade[key])<1e-10,key);
+  for(const key of ["exposure","temperature","tint","contrast","saturation","vibrance","blackPoint","highlightRolloff","clarity","filmStrength","bloomStrength","bloomThreshold","bloomKnee","halationStrength","glareStrength","moonGlowStrength"] as const) assert.ok(Math.abs(a.grade[key]-b.grade[key])<1e-10,key);
 });
 
 test("all grading derivatives remain bounded at minute resolution",()=>{
   let previous=daylightAt(0).grade;
-  const limits={exposure:.04,temperature:.04,contrast:.025,saturation:.025,highlightRolloff:.025,bloomStrength:.025,bloomThreshold:.025,bloomKnee:.025,halationStrength:.025,glareStrength:.025};
+  const limits={exposure:.04,temperature:.04,contrast:.025,saturation:.025,highlightRolloff:.025,bloomStrength:.025,bloomThreshold:.025,bloomKnee:.025,halationStrength:.025,glareStrength:.025,moonGlowStrength:.025};
   for(let minute=1;minute<=1440;minute++){
     const current=daylightAt(minute/60).grade;
     for(const key of Object.keys(limits) as (keyof typeof limits)[]) assert.ok(Math.abs(current[key]-previous[key])<limits[key],`${key} discontinuity at minute ${minute}`);
@@ -23,13 +23,25 @@ test("all grading derivatives remain bounded at minute resolution",()=>{
 });
 
 test("optical response emerges at low sun and remains restrained at night",()=>{
-  const noon=daylightAt(12.25).grade,golden=daylightAt(18.25).grade,night=daylightAt(0).grade;
+  const moonless={illuminatedFraction:.001,transitHour:0,maximumElevation:68,waxing:true};
+  const noon=daylightAt(12.25).grade,golden=daylightAt(18.25).grade;
+  const night=daylightAt(0,new Date(),null,ATMOSPHERE_PRESETS.Standard,moonless).grade;
   assert.ok(golden.halationStrength>noon.halationStrength+.03);
   assert.ok(golden.glareStrength>noon.glareStrength+.01);
   assert.ok(night.bloomThreshold>golden.bloomThreshold+.15);
   assert.ok(night.bloomStrength<noon.bloomStrength);
   assert.ok(golden.bloomThreshold<.15,"low-sun threshold must extract energy from dark story plates");
   assert.ok(golden.bloomStrength>.2,"full optical control must be visibly authorable");
+});
+
+test("a full Story Moon adds one-stop adaptation and silver optical response",()=>{
+  const config=(illuminatedFraction:number)=>({illuminatedFraction,transitHour:0,maximumElevation:68,waxing:true});
+  const base=new Date("2026-08-16T12:00:00-03:00"),profile=ATMOSPHERE_PRESETS.Standard;
+  const half=daylightAt(0,base,null,profile,config(.50)).grade;
+  const full=daylightAt(0,base,null,profile,config(1)).grade;
+  assert.ok(full.exposure>half.exposure+.9,"full Story Moon should add approximately one photographic stop over half Moon");
+  assert.ok(full.moonGlowStrength>.15,"full Story Moon should drive a visible silver optical response");
+  assert.ok(full.bloomThreshold<half.bloomThreshold-.08,"moonlight must expose usable highlights to the bloom extractor");
 });
 
 test("atmospheric influences are smooth and playback is not minute-quantized",()=>{
@@ -105,6 +117,9 @@ test("a full Story Moon cannot invert the evening twilight brightness hierarchy"
 
 test("true night evolves through afterglow, story moon, and pre-dawn",()=>{
   const evening=daylightAt(20.25),late=daylightAt(22),midnight=daylightAt(0),preDawn=daylightAt(4);
+  const moonless={illuminatedFraction:.001,transitHour:0,maximumElevation:68,waxing:true};
+  const moonlessEvening=daylightAt(20.25,new Date(),null,ATMOSPHERE_PRESETS.Standard,moonless);
+  const moonlessLate=daylightAt(22,new Date(),null,ATMOSPHERE_PRESETS.Standard,moonless);
   assert.equal(evening.grade.name,"Early Night");
   assert.equal(late.grade.name,"Moonlit Night");
   assert.equal(midnight.grade.name,"Moonlit Night");
@@ -113,7 +128,7 @@ test("true night evolves through afterglow, story moon, and pre-dawn",()=>{
   assert.ok(midnight.atmosphere.midnightDepth>.95);
   assert.ok(preDawn.atmosphere.preDawnAirglow>.7);
   assert.ok(midnight.atmosphere.moonlightContribution>late.atmosphere.moonlightContribution);
-  assert.ok(evening.grade.exposure>late.grade.exposure+.1,"residual afterglow should fade into the darker night baseline");
+  assert.ok(moonlessEvening.grade.exposure>moonlessLate.grade.exposure+.1,"residual afterglow should fade into the moonless night baseline");
   assert.ok(midnight.atmosphere.moonlightContribution>late.atmosphere.moonlightContribution+.03);
   assert.ok(late.atmosphere.moonlightContribution>preDawn.atmosphere.moonlightContribution+.1);
   assert.ok(midnight.atmosphere.nightProgress>late.atmosphere.nightProgress);

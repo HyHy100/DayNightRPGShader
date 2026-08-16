@@ -170,7 +170,7 @@ export class WebGLRenderer {
       const s=this.compositeShader,g=this.grade;
       gl.uniform2f(s.uniform("uImageScale"),scale[0],scale[1]);gl.uniform1f(s.uniform("uIntensity"),this.intensity);gl.uniform1f(s.uniform("uSplit"),this.split);
       gl.uniform1i(s.uniform("uComparisonMode"),this.comparison==="split"?1:this.comparison==="original"?2:0);gl.uniform1f(s.uniform("uOpticalGlow"),this.opticalGlow);
-      gl.uniform1f(s.uniform("uBloomStrength"),g.bloomStrength);gl.uniform1f(s.uniform("uHalationStrength"),g.halationStrength);gl.uniform1f(s.uniform("uGlareStrength"),g.glareStrength);
+      gl.uniform1f(s.uniform("uBloomStrength"),g.bloomStrength);gl.uniform1f(s.uniform("uHalationStrength"),g.halationStrength);gl.uniform1f(s.uniform("uGlareStrength"),g.glareStrength);gl.uniform1f(s.uniform("uMoonGlowStrength"),g.moonGlowStrength);
       gl.drawArrays(gl.TRIANGLES,0,6);
     });
   }

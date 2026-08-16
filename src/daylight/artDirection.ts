@@ -6,7 +6,7 @@ export interface DaylightGrade {
   contrast:number; saturation:number; vibrance:number; lift:Vec3; gamma:Vec3; gain:Vec3;
   shadows:Vec3; midtones:Vec3; highlights:Vec3; blackPoint:number; highlightRolloff:number;
   clarity:number; filmStrength:number; bloomStrength:number; bloomThreshold:number;
-  bloomKnee:number; halationStrength:number; glareStrength:number;
+  bloomKnee:number; halationStrength:number; glareStrength:number; moonGlowStrength:number;
 }
 const clamp=(x:number,a=0,b=1)=>Math.max(a,Math.min(b,x));
 
@@ -60,6 +60,12 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   // Delaying those additive controls prevents a dark source image from
   // appearing to brighten as civil twilight gives way to nautical twilight.
   const moonNightTone=moon*smootherstep(12,20,-elevation);
+  const moonIllumination=s.moon.position?.illuminatedFraction??0;
+  const fullMoonResponse=storySky*smootherstep(.62,.995,moonIllumination);
+  // A fictional full Moon is an authoring light, not a claim of terrestrial
+  // photometry. Introduce the requested one-stop adaptation only after true
+  // night is established, keeping twilight brightness strictly ordered.
+  const storyFullMoon=fullMoonResponse*smootherstep(18,26,-elevation)*smootherstep(.05,.70,moon);
   // In Story Sky mode the frame is a fictional scene, so low evening sun is
   // allowed a little more photographic presence than a strict clear-sky
   // adaptation. Keep it tied to physical elevation and evening geometry.
@@ -82,7 +88,7 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   const coolSeparation=clamp(s.skyCoolness*(.26+.35*(1-noon))+.20*lowSun*(.55+.45*s.spectralSeparation)+.07*morningFreshness+.11*morningCharacter+.13*afternoonCharacter-.100*noonCrown+.06*s.eveningAfterglow+.08*s.preDawnAirglow-.05*deepNightDensity);
   const exposure=-.04+.14*noon-.12*(1-noon)*daylight-.08*s.haze*skyIllumination-.03*afternoon
     -3.0*solarDarkening-.20*deepNightDensity
-    +.05*s.eveningAfterglow+.04*s.preDawnAirglow+.025*s.scotopicAdaptation+(.45+.50*storySky)*moon+.065*storyGolden
+    +.05*s.eveningAfterglow+.04*s.preDawnAirglow+.025*s.scotopicAdaptation+(.45+.50*storySky)*moon+.95*storyFullMoon+.065*storyGolden
     -.090*morningCharacter+.120*noonCrown-.060*afternoonCharacter;
   const temperature=s.sunWarmth*(.40+.16*eveningBias)-s.skyCoolness*.12*s.twilight-s.night*.25-.07*deepNightDensity-.04*s.preDawnAirglow+afternoonWarmth*.11-morningFreshness*.025-.018*moon+.090*storyGolden
     +.180*morningCharacter-.080*noonCrown+.220*afternoonCharacter;
@@ -111,11 +117,12 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
   // intentionally well below 18% display gray: dark RPG/visual-novel plates
   // often contain no specular values above 0.3 after their night/day grade.
   // The former 0.34 floor therefore extracted virtually no energy.
-  const bloomStrength=.055+.135*opticalDaylight+.165*lowSun+.040*noonCrown-.060*s.night;
-  const bloomThreshold=.115+.065*noonCrown+.275*s.night-.050*lowSun-.025*storyGolden;
+  const bloomStrength=.055+.135*opticalDaylight+.165*lowSun+.040*noonCrown-.060*s.night+.180*storyFullMoon;
+  const bloomThreshold=.115+.065*noonCrown+.275*s.night-.050*lowSun-.025*storyGolden-.220*storyFullMoon;
   const bloomKnee=.085+.060*lowSun+.018*s.haze;
   const halationStrength=.014+.175*lowSun*(.60+.40*s.sunWarmth)+.055*storyGolden+.018*afternoonCharacter;
   const glareStrength=.008+.075*lowSun*(.55+.45*s.haze)+.042*storyGolden+.010*noonCrown;
+  const moonGlowStrength=.38*storyFullMoon;
   const [name,description]=daylightPhase(s);
   return {hour,name,description,exposure,temperature,tint,contrast,saturation,vibrance,lift,gamma,gain,shadows,midtones,highlights,
     blackPoint:Math.max(0,.003+.010*s.night+.007*deepNightDensity-.003*s.scotopicAdaptation+.002*s.twilight-(.003+.008*storySky)*moonNightTone-.0015*storyGolden-.001*morningCharacter+.0012*afternoonCharacter),
@@ -123,5 +130,5 @@ export function calculateDaylightGrade(s:AtmosphereState,hour:number):DaylightGr
     clarity:.065*noon-.055*s.haze-.025*s.twilight+.012*moonNightTone+.020*noonCrown-.015*morningCharacter-.010*afternoonCharacter,
     filmStrength:.42+.20*lowSun+.18*s.twilight+.20*s.night+.08*deepNightDensity+.035*morningCharacter+.045*afternoonCharacter,
     bloomStrength:Math.max(.008,bloomStrength),bloomThreshold:clamp(bloomThreshold,.055,.58),
-    bloomKnee:clamp(bloomKnee,.065,.20),halationStrength:Math.max(0,halationStrength),glareStrength:Math.max(0,glareStrength)};
+    bloomKnee:clamp(bloomKnee,.065,.20),halationStrength:Math.max(0,halationStrength),glareStrength:Math.max(0,glareStrength),moonGlowStrength};
 }
