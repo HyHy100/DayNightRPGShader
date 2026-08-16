@@ -13,9 +13,7 @@ export interface VideoExportOptions {
   imageSource:string|Blob;onProgress?:(progress:VideoExportProgress)=>void;
 }
 
-export const WEBM_MIME_CANDIDATES=["video/webm;codecs=vp9","video/webm;codecs=vp8","video/webm"] as const;
 export const getExportDimensions=(resolution:VideoResolution)=>resolution==="1080p"?{width:1920,height:1080}:{width:1280,height:720};
-export const chooseWebMMimeType=(isSupported:(type:string)=>boolean)=>WEBM_MIME_CANDIDATES.find(isSupported)??null;
 export const exportFrameCount=(durationSeconds:number,frameRate:number)=>Math.max(2,Math.round(durationSeconds*frameRate));
 export const exportFrameProgress=(frameIndex:number,totalFrames:number)=>Math.max(0,Math.min(1,frameIndex/Math.max(1,totalFrames-1)));
 export const exportFilename=(date:Date,composition:VideoComposition)=>{

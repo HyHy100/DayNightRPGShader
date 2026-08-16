@@ -6,21 +6,23 @@ import { daylightAt } from "../src/daylight/daylightModel";
 import { calculateLunarPosition } from "../src/daylight/lunarPosition";
 import { calculateMoonlight,calculateStoryMoonlight,UNAVAILABLE_MOONLIGHT } from "../src/daylight/moonlightModel";
 import { calculateSolarPosition } from "../src/daylight/solarPosition";
-import { chooseWebMMimeType,exportFilename,exportFrameCount,exportFrameProgress,getExportDimensions,sampleDayCycleTimeline } from "../src/export/videoExportModel";
-import { fixWebmDuration } from "../src/export/fixWebmDuration";
+import { exportFilename,exportFrameCount,exportFrameProgress,getExportDimensions,sampleDayCycleTimeline } from "../src/export/videoExportModel";
+import { extractWebMVideoFrames,muxWebM } from "../src/export/webmMuxer";
 
-test("video export writes an exact WebM duration for Linux players",async()=>{
-  const bytes=new Uint8Array([
-    0x1a,0x45,0xdf,0xa3,0x80,
-    0x18,0x53,0x80,0x67,0xff,
-    0x15,0x49,0xa9,0x66,0x87,
-    0x2a,0xd7,0xb1,0x83,0x0f,0x42,0x40,
-  ]);
-  const fixed=new Uint8Array(await (await fixWebmDuration(new Blob([bytes],{type:"video/webm"}),15_000)).arrayBuffer());
+test("video export muxes one finite timestamped WebM timeline for Linux players",async()=>{
+  const blob=muxWebM({width:1280,height:720,frameRate:30,durationUs:15_000_000,codec:"vp9",chunks:[
+    {timestamp:0,duration:33_333,type:"key",data:new Uint8Array([1,2,3])},
+    {timestamp:33_333,duration:33_334,type:"delta",data:new Uint8Array([4,5])},
+  ]});
+  const fixed=new Uint8Array(await blob.arrayBuffer());
   let duration=-1;
   for(let index=0;index<=fixed.length-11;index++)if(fixed[index]===0x44&&fixed[index+1]===0x89&&fixed[index+2]===0x88)duration=new DataView(fixed.buffer,fixed.byteOffset+index+3,8).getFloat64(0,false);
   assert.equal(duration,15_000);
-  assert.equal(fixed.length,bytes.length+11);
+  assert.equal(blob.type,"video/webm;codecs=vp9");
+  assert.deepEqual([...fixed.subarray(0,4)],[0x1a,0x45,0xdf,0xa3]);
+  const extracted=await extractWebMVideoFrames(blob);
+  assert.deepEqual(extracted.map(frame=>frame.type),["key","delta"]);
+  assert.deepEqual([...extracted[0].data],[1,2,3]);
 });
 
 test("video export maps one chronological local day without quantization",()=>{
@@ -31,10 +33,8 @@ test("video export maps one chronological local day without quantization",()=>{
   for(let frame=1;frame<=450;frame++){const sample=sampleDayCycleTimeline(base,frame/450);assert.ok(sample.date.getTime()>previous);previous=sample.date.getTime();}
 });
 
-test("video export selects WebM fallbacks and stable output metadata",()=>{
+test("video export uses stable dimensions and output metadata",()=>{
   assert.deepEqual(getExportDimensions("1080p"),{width:1920,height:1080});assert.deepEqual(getExportDimensions("720p"),{width:1280,height:720});
-  assert.equal(chooseWebMMimeType(type=>type.includes("vp8")),"video/webm;codecs=vp8");
-  assert.equal(chooseWebMMimeType(()=>false),null);
   assert.equal(exportFilename(new Date(2026,7,16),"comparison"),"daylight-cycle-2026-08-16-comparison.webm");
 });
 
