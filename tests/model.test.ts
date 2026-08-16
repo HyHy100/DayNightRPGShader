@@ -152,16 +152,20 @@ test("twilight exposure darkens monotonically below daytime",()=>{
   for(const grade of [noon,civil,nautical,astronomical,night])assert.ok(grade.blackPoint>=0,"twilight toe must not lift the black point");
 });
 
-test("a full Story Moon cannot invert the evening twilight brightness hierarchy",()=>{
+test("a full Story Moon hands twilight into night without a dark evening valley",()=>{
   let previous=daylightAt(18.6).grade.exposure;
-  for(let minute=Math.ceil(18.6*60)+1;minute<=Math.floor(20.2*60);minute++){
+  for(let minute=Math.ceil(18.6*60)+1;minute<=Math.floor(19.35*60);minute++){
     const state=daylightAt(minute/60),current=state.grade.exposure;
-    assert.ok(current<=previous+.002,`twilight exposure brightened at ${minute} minutes: ${previous} -> ${current}`);
+    assert.ok(current<=previous+.002,`early twilight exposure brightened at ${minute} minutes: ${previous} -> ${current}`);
     previous=current;
   }
   const civil=daylightAt(18.9).grade,nautical=daylightAt(19.4).grade,astronomical=daylightAt(19.9).grade;
   assert.ok(civil.exposure>nautical.exposure+.2);
-  assert.ok(nautical.exposure>astronomical.exposure+.2);
+  assert.ok(astronomical.exposure>nautical.exposure,"a bright rising Moon should overtake the fading sky during astronomical twilight");
+  const midnight=daylightAt(0).grade.exposure,lateTwilight=[];
+  for(let minute=Math.ceil(19.4*60);minute<=22*60;minute++)lateTwilight.push(daylightAt(minute/60).grade.exposure);
+  assert.ok(Math.min(...lateTwilight)>midnight-.75,"rising Moon must prevent a deep post-twilight exposure valley");
+  for(let i=1;i<lateTwilight.length;i++)assert.ok(Math.abs(lateTwilight[i]-lateTwilight[i-1])<.025,`Moonrise handoff jumped at sample ${i}`);
   const nauticalStart=daylightAt(19.15).grade,nauticalEnd=daylightAt(19.6).grade;
   assert.ok(nauticalEnd.lift[1]<=nauticalStart.lift[1]+.0002,"lunar toe adaptation must not lift nautical twilight");
   assert.ok(nauticalEnd.blackPoint>=nauticalStart.blackPoint-.0005,"lunar black-point opening must wait until astronomical twilight");
